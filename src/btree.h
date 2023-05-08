@@ -496,7 +496,7 @@ class BTreeIndex {
    * @param new_page 
    * @param attrType
    **/
-  void buildBTree(const std::string &relationName, BufMgr *bufMgrIn, Page &new_page, const Datatype attrType, BlobFile* &BTreeDataFile, PageId BTreeID);
+  void buildBTree(const std::string &relationName, BufMgr *bufMgrIn, const Datatype attrType, BlobFile* &BTreeDataFile);
 	
 };
 
@@ -504,7 +504,7 @@ template <class T>
 class BTree {
 public:
   // IndexMetaInfo BTreeMetaData;
-  bool isRootNode;
+  bool isLeafNode;
 
   // NonLeafNodeInt NonLeafInt;
   // NonLeafNodeDouble NonLeafDouble;
@@ -518,7 +518,7 @@ public:
   std::vector<BTree> children;
 
   BTree() {
-    isRootNode = false;
+    isLeafNode = false;
   }
 
   // BTree(char *relationName, int attrByteOffset, Datatype attrType, PageId rootPageNo) {

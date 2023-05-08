@@ -17,6 +17,7 @@
 #include "exceptions/end_of_file_exception.h"
 #include "exceptions/file_exists_exception.h"
 #include "exceptions/insufficient_space_exception.h"
+#include <any>
 
 //#define DEBUG
 
@@ -62,11 +63,41 @@ const void BTreeIndex::InitializeBTreeIndex(BufMgr *bufMgrIn,
 
 void BTreeIndex::buildBTree(const std::string &relationName,
 							BufMgr *bufMgrIn,
-							Page &new_page,
 							const Datatype attrType,
-							BlobFile* &BTreeDataFile,
-							PageId BTreeID)
+							BlobFile* &BTreeDataFile)
 {
+	// allocate a new page on BTreeDataFile
+	PageId BTreeID;
+	Page new_page = BTreeDataFile->allocatePage(BTreeID);
+
+	// get the data type
+	Datatype datatype = static_cast<Datatype>(attrType);
+	std::any recordKey;
+	std::any pageKey;
+	switch (datatype)
+	{
+	case INTEGER:
+		recordKey = std::vector<RIDKeyPair<int>>{};
+		pageKey = std::vector<PageKeyPair<int>>{};
+		break;
+
+	case DOUBLE:
+		recordKey = std::vector<RIDKeyPair<double>>{};
+		pageKey = std::vector<PageKeyPair<double>>{};
+		break;
+
+	case STRING:
+		recordKey = std::vector<RIDKeyPair<std::string>>{};
+		pageKey = std::vector<PageKeyPair<std::string>>{};
+		break;
+
+	default:
+		std::cout << "unknown type" << std::endl;
+		throw ScanNotInitializedException();
+	}
+
+	// scan the file and insert key RID into vector
+	// todo: here we assume it is initialized with order, but in reality, we need to sort it
 	FileScan fscan(relationName, bufMgrIn);
 	try
 	{
@@ -111,6 +142,8 @@ void BTreeIndex::buildBTree(const std::string &relationName,
 	{
 		std::cout << "Read all records" << std::endl;
 	}
+
+	BTreeDataFile->writePage(BTreeID, new_page);
 }
 
 // -----------------------------------------------------------------------------
@@ -149,15 +182,9 @@ BTreeIndex::BTreeIndex(const std::string & relationName,
 	BTreeIndex::BTreeMetaData.attrByteOffset = attrByteOffset;
 	BTreeIndex::BTreeMetaData.attrType = attrType;
 
-	// allocate a new page on BTreeDataFile
-	PageId BTreeID;
-	Page new_page = BTreeDataFile->allocatePage(BTreeID);
-	// this the root page, so we store in BTreeMetaData and BTreeIndex
-	BTreeIndex::rootPageNum = BTreeID;
-	BTreeIndex::BTreeMetaData.rootPageNo = BTreeID;
-
 	// Get Records from relation file: use FileScan Class
-	buildBTree(relationName, bufMgrIn, new_page, attrType, BTreeDataFile, BTreeID);
+	buildBTree(relationName, bufMgrIn, attrType, BTreeDataFile);
+
 }
 
 
