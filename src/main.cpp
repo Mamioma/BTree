@@ -293,7 +293,7 @@ void createRelationBackward()
 			catch(InsufficientSpaceException e)
 			{
 				file1->writePage(new_page_number, new_page);
-  			new_page = file1->allocatePage(new_page_number);
+  				new_page = file1->allocatePage(new_page_number);
 			}
 		}
   }

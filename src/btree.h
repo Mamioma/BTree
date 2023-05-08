@@ -8,6 +8,7 @@
 #pragma once
 
 #include <iostream>
+#include <vector>
 #include <string>
 #include "string.h"
 #include <sstream>
@@ -297,6 +298,11 @@ class BTreeIndex {
  private:
 
   /**
+   * file meta data
+   */
+  IndexMetaInfo BTreeMetaData;
+
+  /**
    * File object for the index file.
    */
 	File		*file;
@@ -472,7 +478,56 @@ class BTreeIndex {
 	 * @throws ScanNotInitializedException If no scan has been initialized.
 	**/
 	const void endScan();
+
+  /**
+   * @brief initialize some variables in struct
+   *
+   * @param bufMgrIn
+   * @param attrByteOffset
+   * @param attrType
+   **/
+  const void InitializeBTreeIndex(BufMgr *bufMgrIn, const int attrByteOffset, const Datatype attrType);
+
+  /**
+   * @brief 
+   * build a B+ Tree using fileScan class
+   * @param relationName 
+   * @param bufMgrIn 
+   * @param new_page 
+   * @param attrType
+   **/
+  void buildBTree(const std::string &relationName, BufMgr *bufMgrIn, Page &new_page, const Datatype attrType, BlobFile* &BTreeDataFile, PageId BTreeID);
 	
+};
+
+template <class T>
+class BTree {
+public:
+  // IndexMetaInfo BTreeMetaData;
+  bool isRootNode;
+
+  // NonLeafNodeInt NonLeafInt;
+  // NonLeafNodeDouble NonLeafDouble;
+  // NonLeafNodeString NonLeafString;
+  // LeafNodeInt LeafInt;
+  // LeafNodeDouble LeafDouble;
+  // LeafNodeString LeafString;
+  std::vector<RIDKeyPair<T>> recordKey;
+  std::vector<PageKeyPair<T>> pageKey;
+
+  std::vector<BTree> children;
+
+  BTree() {
+    isRootNode = false;
+  }
+
+  // BTree(char *relationName, int attrByteOffset, Datatype attrType, PageId rootPageNo) {
+  //   memcpy(BTreeMetaData.relationName, relationName, strlen(relationName) + 1);
+  //   BTreeMetaData.attrByteOffset = attrByteOffset;
+  //   BTreeMetaData.attrType = attrType;
+  //   BTreeMetaData.rootPageNo = rootPageNo;
+  //   isRootNode = false;
+  // }
 };
 
 }
