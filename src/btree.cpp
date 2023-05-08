@@ -117,22 +117,32 @@ void BTreeIndex::buildBTree(const std::string &relationName,
 					if (attrType == INTEGER)
 					{
 						int key = *((int *)(record + offsetof(RECORD, i)));
+						RIDKeyPair<int> k;
+						k.set(scanRid, key);
+						recordKey.push_back(k);
 						std::cout << key << std::endl;
 					}
 					else if (attrType == DOUBLE)
 					{
 						double key = *((double *)(record + offsetof(RECORD, d)));
+						RIDKeyPair<double> k;
+						k.set(scanRid, key);
+						recordKey.push_back(k);
 						std::cout << key << std::endl;
 					}
 					else if (attrType == STRING)
 					{
 						std::string key = (record + offsetof(RECORD, s));
+						RIDKeyPair<std::string> k;
+						k.set(scanRid, key);
+						recordKey.push_back(k);
 						std::cout << key << std::endl;
 					}
 				}
 			}
 			catch (InsufficientSpaceException &e)
 			{
+				
 				BTreeDataFile->writePage(BTreeID, new_page);
 				new_page = BTreeDataFile->allocatePage(BTreeID);
 			}

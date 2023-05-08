@@ -515,7 +515,7 @@ public:
   std::vector<RIDKeyPair<T>> recordKey;
   std::vector<PageKeyPair<T>> pageKey;
 
-  std::vector<BTree> children;
+  std::vector<BTree*> children;
 
   BTree() {
     isLeafNode = false;
