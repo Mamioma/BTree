@@ -17,7 +17,7 @@
 #include "exceptions/end_of_file_exception.h"
 #include "exceptions/file_exists_exception.h"
 #include "exceptions/insufficient_space_exception.h"
-#include <any>
+#include <vector>
 
 //#define DEBUG
 
@@ -61,40 +61,45 @@ const void BTreeIndex::InitializeBTreeIndex(BufMgr *bufMgrIn,
 	BTreeIndex::scanExecuting = false;
 }
 
+template <class T>
 void BTreeIndex::buildBTree(const std::string &relationName,
 							BufMgr *bufMgrIn,
 							const Datatype attrType,
-							BlobFile* &BTreeDataFile)
+							BlobFile* &BTreeDataFile,
+							BTree<T>* &BPlusTree)
 {
 	// allocate a new page on BTreeDataFile
 	PageId BTreeID;
 	Page new_page = BTreeDataFile->allocatePage(BTreeID);
 
+	std::vector recordKey = std::vector<RIDKeyPair<T>>{};
+	std::vector pageKey = std::vector<PageKeyPair<T>>{};
+
 	// get the data type
-	Datatype datatype = static_cast<Datatype>(attrType);
-	std::any recordKey;
-	std::any pageKey;
-	switch (datatype)
-	{
-	case INTEGER:
-		recordKey = std::vector<RIDKeyPair<int>>{};
-		pageKey = std::vector<PageKeyPair<int>>{};
-		break;
+	// Datatype datatype = static_cast<Datatype>(attrType);
+	// std::any recordKey;
+	// std::any pageKey;
+	// switch (datatype)
+	// {
+	// case INTEGER:
+	// 	recordKey = std::vector<RIDKeyPair<int>>{};
+	// 	pageKey = std::vector<PageKeyPair<int>>{};
+	// 	break;
 
-	case DOUBLE:
-		recordKey = std::vector<RIDKeyPair<double>>{};
-		pageKey = std::vector<PageKeyPair<double>>{};
-		break;
+	// case DOUBLE:
+	// 	recordKey = std::vector<RIDKeyPair<double>>{};
+	// 	pageKey = std::vector<PageKeyPair<double>>{};
+	// 	break;
 
-	case STRING:
-		recordKey = std::vector<RIDKeyPair<std::string>>{};
-		pageKey = std::vector<PageKeyPair<std::string>>{};
-		break;
+	// case STRING:
+	// 	recordKey = std::vector<RIDKeyPair<std::string>>{};
+	// 	pageKey = std::vector<PageKeyPair<std::string>>{};
+	// 	break;
 
-	default:
-		std::cout << "unknown type" << std::endl;
-		throw ScanNotInitializedException();
-	}
+	// default:
+	// 	std::cout << "unknown type" << std::endl;
+	// 	throw ScanNotInitializedException();
+	// }
 
 	// scan the file and insert key RID into vector
 	// todo: here we assume it is initialized with order, but in reality, we need to sort it
@@ -193,7 +198,17 @@ BTreeIndex::BTreeIndex(const std::string & relationName,
 	BTreeIndex::BTreeMetaData.attrType = attrType;
 
 	// Get Records from relation file: use FileScan Class
-	buildBTree(relationName, bufMgrIn, attrType, BTreeDataFile);
+	// plus build a BTree
+	if (attrType == INTEGER) {
+		BTree<int> *BPlusTree = new BTree<int>();
+		buildBTree<int>(relationName, bufMgrIn, attrType, BTreeDataFile, BPlusTree);
+	} else if (attrType == DOUBLE) {
+		BTree<double> *BPlusTree = new BTree<double>();
+		buildBTree<double>(relationName, bufMgrIn, attrType, BTreeDataFile, BPlusTree);
+	} else if (attrType == STRING) {
+		BTree<std::string> *BPlusTree = new BTree<std::string>();
+		buildBTree<std::string>(relationName, bufMgrIn, attrType, BTreeDataFile, BPlusTree);
+	}
 
 }
 

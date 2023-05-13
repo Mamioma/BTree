@@ -493,10 +493,12 @@ class BTreeIndex {
    * build a B+ Tree using fileScan class
    * @param relationName 
    * @param bufMgrIn 
-   * @param new_page 
    * @param attrType
+   * @param BTreeDataFile
+   * @param BPlusTree
    **/
-  void buildBTree(const std::string &relationName, BufMgr *bufMgrIn, const Datatype attrType, BlobFile* &BTreeDataFile);
+  template <class T>
+  void buildBTree(const std::string &relationName, BufMgr *bufMgrIn, const Datatype attrType, BlobFile* &BTreeDataFile, BTree<T>* &BPlusTree);
 	
 };
 
@@ -505,15 +507,16 @@ class BTree {
 public:
   // IndexMetaInfo BTreeMetaData;
   bool isLeafNode;
+  Datatype BTreeType;
 
-  // NonLeafNodeInt NonLeafInt;
-  // NonLeafNodeDouble NonLeafDouble;
-  // NonLeafNodeString NonLeafString;
-  // LeafNodeInt LeafInt;
-  // LeafNodeDouble LeafDouble;
-  // LeafNodeString LeafString;
-  std::vector<RIDKeyPair<T>> recordKey;
-  std::vector<PageKeyPair<T>> pageKey;
+  NonLeafNodeInt NonLeafInt;
+  NonLeafNodeDouble NonLeafDouble;
+  NonLeafNodeString NonLeafString;
+  LeafNodeInt LeafInt;
+  LeafNodeDouble LeafDouble;
+  LeafNodeString LeafString;
+  // std::vector<RIDKeyPair<T>> recordKey;
+  // std::vector<PageKeyPair<T>> pageKey;
 
   std::vector<BTree*> children;
 
