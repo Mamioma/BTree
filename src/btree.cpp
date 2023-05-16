@@ -65,8 +65,7 @@ template <class T>
 void BTreeIndex::buildBTree(const std::string &relationName,
 							BufMgr *bufMgrIn,
 							const Datatype attrType,
-							BlobFile* &BTreeDataFile,
-							BTree<T>* &BPlusTree)
+							BlobFile* &BTreeDataFile)
 {
 	// allocate a new page on BTreeDataFile
 	PageId BTreeID;
@@ -74,32 +73,6 @@ void BTreeIndex::buildBTree(const std::string &relationName,
 
 	std::vector recordKey = std::vector<RIDKeyPair<T>>{};
 	std::vector pageKey = std::vector<PageKeyPair<T>>{};
-
-	// get the data type
-	// Datatype datatype = static_cast<Datatype>(attrType);
-	// std::any recordKey;
-	// std::any pageKey;
-	// switch (datatype)
-	// {
-	// case INTEGER:
-	// 	recordKey = std::vector<RIDKeyPair<int>>{};
-	// 	pageKey = std::vector<PageKeyPair<int>>{};
-	// 	break;
-
-	// case DOUBLE:
-	// 	recordKey = std::vector<RIDKeyPair<double>>{};
-	// 	pageKey = std::vector<PageKeyPair<double>>{};
-	// 	break;
-
-	// case STRING:
-	// 	recordKey = std::vector<RIDKeyPair<std::string>>{};
-	// 	pageKey = std::vector<PageKeyPair<std::string>>{};
-	// 	break;
-
-	// default:
-	// 	std::cout << "unknown type" << std::endl;
-	// 	throw ScanNotInitializedException();
-	// }
 
 	// scan the file and insert key RID into vector
 	// todo: here we assume it is initialized with order, but in reality, we need to sort it
@@ -184,30 +157,43 @@ BTreeIndex::BTreeIndex(const std::string & relationName,
 	// create a B+ Tree BlobFile to store the index
 	// if a B+ Tree with the indexName already been created, catch a FileExistsException
 	BlobFile* BTreeDataFile;
+	Page* headerPage;
+	Page* rootPage;
 	try {
 		BTreeDataFile = new BlobFile(indexName, true);
 		BTreeIndex::file = BTreeDataFile;
 	}
 	catch (const FileExistsException& e) {
 		// todo: if the exsited file index doesn't match witht the inserted index, throw a BadIndexInfoException
+
+		BTreeDataFile = new BlobFile(indexName, false);
+
+		// here number is one because it is the metadata, and page number starts at one
+		bufMgr->readPage(BTreeDataFile, 1, headerPage);
+
+		IndexMetaInfo* metaDataInfo = (IndexMetaInfo*) headerPage;
+
+		rootPageNum = metaDataInfo->rootPageNo;
+
+		bufMgr->unPinPage(file, rootPageNum, false);
+
+		return;
 	}
 
 	// copy metadata information
-	memcpy(BTreeIndex::BTreeMetaData.relationName, relationName.c_str(), strlen(relationName.c_str()) + 1);
-	BTreeIndex::BTreeMetaData.attrByteOffset = attrByteOffset;
-	BTreeIndex::BTreeMetaData.attrType = attrType;
+	IndexMetaInfo BTreeMetaData;
+	memcpy(BTreeMetaData.relationName, relationName.c_str(), strlen(relationName.c_str()) + 1);
+	BTreeMetaData.attrByteOffset = attrByteOffset;
+	BTreeMetaData.attrType = attrType;
 
 	// Get Records from relation file: use FileScan Class
 	// plus build a BTree
 	if (attrType == INTEGER) {
-		BTree<int> *BPlusTree = new BTree<int>();
-		buildBTree<int>(relationName, bufMgrIn, attrType, BTreeDataFile, BPlusTree);
+		buildBTree<int>(relationName, bufMgrIn, attrType, BTreeDataFile);
 	} else if (attrType == DOUBLE) {
-		BTree<double> *BPlusTree = new BTree<double>();
-		buildBTree<double>(relationName, bufMgrIn, attrType, BTreeDataFile, BPlusTree);
+		buildBTree<double>(relationName, bufMgrIn, attrType, BTreeDataFile);
 	} else if (attrType == STRING) {
-		BTree<std::string> *BPlusTree = new BTree<std::string>();
-		buildBTree<std::string>(relationName, bufMgrIn, attrType, BTreeDataFile, BPlusTree);
+		buildBTree<std::string>(relationName, bufMgrIn, attrType, BTreeDataFile);
 	}
 
 }

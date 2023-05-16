@@ -298,11 +298,6 @@ class BTreeIndex {
  private:
 
   /**
-   * file meta data
-   */
-  IndexMetaInfo BTreeMetaData;
-
-  /**
    * File object for the index file.
    */
 	File		*file;
@@ -498,7 +493,7 @@ class BTreeIndex {
    * @param BPlusTree
    **/
   template <class T>
-  void buildBTree(const std::string &relationName, BufMgr *bufMgrIn, const Datatype attrType, BlobFile* &BTreeDataFile, BTree<T>* &BPlusTree);
+  void buildBTree(const std::string &relationName, BufMgr *bufMgrIn, const Datatype attrType, BlobFile* &BTreeDataFile);
 	
 };
 
