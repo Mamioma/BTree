@@ -63,75 +63,81 @@ const void BTreeIndex::InitializeBTreeIndex(BufMgr *bufMgrIn,
 
 template <class T>
 void BTreeIndex::buildBTree(const std::string &relationName,
-							BufMgr *bufMgrIn,
-							const Datatype attrType,
-							BlobFile* &BTreeDataFile)
+							IndexMetaInfo &BTreeMetaData)
 {
-	// allocate a new page on BTreeDataFile
-	PageId BTreeID;
-	Page new_page = BTreeDataFile->allocatePage(BTreeID);
+	// allocate a root page and a header page on BTreeDataFile
+	Page* headerPage;
+	Page* rootPage;
+	PageId headerPageId, rootPageId;
 
-	std::vector recordKey = std::vector<RIDKeyPair<T>>{};
-	std::vector pageKey = std::vector<PageKeyPair<T>>{};
+	bufMgr->allocPage(file, headerPage, headerPageId);
+	bufMgr->allocPage(file, rootPage, rootPageId);
+
+	// save it in the metadata file
+	BTreeMetaData.rootPageNo = rootPageId;
+
+	// copy the metadata into header page
+	memcpy(headerPage, &BTreeMetaData, sizeof(BTreeMetaData));
+	std::cout << headerPage->page_number();
 
 	// scan the file and insert key RID into vector
 	// todo: here we assume it is initialized with order, but in reality, we need to sort it
-	FileScan fscan(relationName, bufMgrIn);
-	try
-	{
-		while (1) {
-			RecordId scanRid;
-			try
-			{
-				while (1)
-				{
-					fscan.scanNext(scanRid);
+	// FileScan fscan(relationName, bufMgr);
+	// try
+	// {
+	// 	while (1) {
+	// 		RecordId scanRid;
+	// 		try
+	// 		{
+	// 			while (1)
+	// 			{
+	// 				fscan.scanNext(scanRid);
 
-					std::string recordStr = fscan.getRecord();
-					new_page.insertRecord(recordStr);
+	// 				std::string recordStr = fscan.getRecord();
+	// 				new_page.insertRecord(recordStr);
 
-					// get the index key from record
-					const char *record = recordStr.c_str();
-					if (attrType == INTEGER)
-					{
-						int key = *((int *)(record + offsetof(RECORD, i)));
-						RIDKeyPair<int> k;
-						k.set(scanRid, key);
-						recordKey.push_back(k);
-						std::cout << key << std::endl;
-					}
-					else if (attrType == DOUBLE)
-					{
-						double key = *((double *)(record + offsetof(RECORD, d)));
-						RIDKeyPair<double> k;
-						k.set(scanRid, key);
-						recordKey.push_back(k);
-						std::cout << key << std::endl;
-					}
-					else if (attrType == STRING)
-					{
-						std::string key = (record + offsetof(RECORD, s));
-						RIDKeyPair<std::string> k;
-						k.set(scanRid, key);
-						recordKey.push_back(k);
-						std::cout << key << std::endl;
-					}
-				}
-			}
-			catch (InsufficientSpaceException &e)
-			{
+	// 				// get the index key from record
+	// 				const char *record = recordStr.c_str();
+	// 				if (BTreeMetaData.attrType == INTEGER)
+	// 				{
+	// 					int key = *((int *)(record + offsetof(RECORD, i)));
+	// 					RIDKeyPair<int> k;
+	// 					k.set(scanRid, key);
+	// 					recordKey.push_back(k);
+	// 					std::cout << key << std::endl;
+	// 				}
+	// 				else if (BTreeMetaData.attrType == DOUBLE)
+	// 				{
+	// 					double key = *((double *)(record + offsetof(RECORD, d)));
+	// 					RIDKeyPair<double> k;
+	// 					k.set(scanRid, key);
+	// 					recordKey.push_back(k);
+	// 					std::cout << key << std::endl;
+	// 				}
+	// 				else if (BTreeMetaData.attrType == STRING)
+	// 				{
+	// 					std::string key = (record + offsetof(RECORD, s));
+	// 					RIDKeyPair<std::string> k;
+	// 					k.set(scanRid, key);
+	// 					recordKey.push_back(k);
+	// 					std::cout << key << std::endl;
+	// 				}
+	// 			}
+	// 		}
+	// 		catch (InsufficientSpaceException &e)
+	// 		{
 				
-				BTreeDataFile->writePage(BTreeID, new_page);
-				new_page = BTreeDataFile->allocatePage(BTreeID);
-			}
-		}
-	}
-	catch (EndOfFileException e)
-	{
-		std::cout << "Read all records" << std::endl;
-	}
+	// 			BTreeDataFile->writePage(BTreeID, new_page);
+	// 			new_page = BTreeDataFile->allocatePage(BTreeID);
+	// 		}
+	// 	}
+	// }
+	// catch (EndOfFileException e)
+	// {
+	// 	std::cout << "Read all records" << std::endl;
+	// }
 
-	BTreeDataFile->writePage(BTreeID, new_page);
+	// BTreeDataFile->writePage(BTreeID, new_page);
 }
 
 // -----------------------------------------------------------------------------
@@ -189,11 +195,11 @@ BTreeIndex::BTreeIndex(const std::string & relationName,
 	// Get Records from relation file: use FileScan Class
 	// plus build a BTree
 	if (attrType == INTEGER) {
-		buildBTree<int>(relationName, bufMgrIn, attrType, BTreeDataFile);
+		buildBTree<int>(relationName, BTreeMetaData);
 	} else if (attrType == DOUBLE) {
-		buildBTree<double>(relationName, bufMgrIn, attrType, BTreeDataFile);
+		buildBTree<double>(relationName, BTreeMetaData);
 	} else if (attrType == STRING) {
-		buildBTree<std::string>(relationName, bufMgrIn, attrType, BTreeDataFile);
+		buildBTree<std::string>(relationName, BTreeMetaData);
 	}
 
 }

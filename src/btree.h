@@ -493,8 +493,7 @@ class BTreeIndex {
    * @param BPlusTree
    **/
   template <class T>
-  void buildBTree(const std::string &relationName, BufMgr *bufMgrIn, const Datatype attrType, BlobFile* &BTreeDataFile);
-	
+  void buildBTree(const std::string &relationName, IndexMetaInfo &BTreeMetaData);
 };
 
 template <class T>
