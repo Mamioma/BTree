@@ -73,9 +73,20 @@ void BTreeIndex::buildBTree(const std::string &relationName,
 	bufMgr->allocPage(file, headerPageNum, headerPage);
 	bufMgr->allocPage(file, rootPageNum, rootPage);
 
+	// initalize the size of the root to zeros
+	if (attributeType == INTEGER) {
+		((LeafNodeInt*) rootPage)->size = 0;
+	} else if (attributeType == DOUBLE) {
+		((LeafNodeDouble*) rootPage)->size = 0;
+	} else {
+		((LeafNodeString*) rootPage)->size = 0;
+	}
+
 	// save it in the metadata file
 	BTreeMetaData.rootPageNo = rootPageNum;
-	BTreeMetaData.isLeaf = true;
+	BTreeMetaData.isLeafPage = true;
+
+	std::cout << "INTARRAYLEAFSIZE: " << INTARRAYLEAFSIZE << std::endl;
 
 	// copy the metadata into header page
 	memcpy(headerPage, &BTreeMetaData, sizeof(IndexMetaInfo));
@@ -224,8 +235,21 @@ const void BTreeIndex::insertEntry(const void *key, const RecordId rid)
 	// read the header page and cast it into IndexMetaInfo
 	Page* headerPage;
 	bufMgr->readPage(file, headerPageNum, headerPage);
+	bufMgr->unPinPage(file, headerPageNum, false);
 	IndexMetaInfo* metaDataPage = (IndexMetaInfo*) headerPage;
-	std::cout << "is leaf page: " << metaDataPage->isLeaf << std::endl;
+
+	// if it a leaf page, which indicates that there is only one level 
+	// in other words, there are no nonLeafPage.
+	if (metaDataPage->isLeafPage) {
+		// read the root page
+		Page *rootPage;
+		bufMgr->readPage(file, rootPageNum, rootPage);
+		bufMgr->unPinPage(file, rootPageNum, false);
+		std::cout << "size = " << ((LeafNodeInt*)rootPage)->size << std::endl;
+	} else {
+		// todo: dealing with non leaf pages
+	}
+
 }
 
 // -----------------------------------------------------------------------------
