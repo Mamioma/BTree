@@ -139,6 +139,11 @@ bool operator<( const RIDKeyPair<T>& r1, const RIDKeyPair<T>& r2 )
 */
 struct IndexMetaInfo{
   /**
+   * whether it is a leaf node
+   */
+  bool isLeaf;
+
+  /**
    * Name of base relation.
    */
 	char relationName[20];

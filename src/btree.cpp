@@ -59,6 +59,7 @@ const void BTreeIndex::InitializeBTreeIndex(BufMgr *bufMgrIn,
 		throw ScanNotInitializedException();
 	}
 	BTreeIndex::scanExecuting = false;
+	BTreeIndex::headerPageNum = 1;
 }
 
 template <class T>
@@ -68,74 +69,67 @@ void BTreeIndex::buildBTree(const std::string &relationName,
 	// allocate a root page and a header page on BTreeDataFile
 	Page* headerPage;
 	Page* rootPage;
-	PageId headerPageId, rootPageId;
 
-	bufMgr->allocPage(file, headerPage, headerPageId);
-	bufMgr->allocPage(file, rootPage, rootPageId);
+	bufMgr->allocPage(file, headerPageNum, headerPage);
+	bufMgr->allocPage(file, rootPageNum, rootPage);
 
 	// save it in the metadata file
-	BTreeMetaData.rootPageNo = rootPageId;
+	BTreeMetaData.rootPageNo = rootPageNum;
+	BTreeMetaData.isLeaf = true;
 
 	// copy the metadata into header page
-	memcpy(headerPage, &BTreeMetaData, sizeof(BTreeMetaData));
-	std::cout << headerPage->page_number();
+	memcpy(headerPage, &BTreeMetaData, sizeof(IndexMetaInfo));
 
 	// scan the file and insert key RID into vector
 	// todo: here we assume it is initialized with order, but in reality, we need to sort it
-	// FileScan fscan(relationName, bufMgr);
-	// try
-	// {
-	// 	while (1) {
-	// 		RecordId scanRid;
-	// 		try
-	// 		{
-	// 			while (1)
-	// 			{
-	// 				fscan.scanNext(scanRid);
+	FileScan fscan(relationName, bufMgr);
+	try
+	{
+		while (1) {
+			RecordId scanRid;
+			try
+			{
+				while (1)
+				{
+					fscan.scanNext(scanRid);
 
-	// 				std::string recordStr = fscan.getRecord();
-	// 				new_page.insertRecord(recordStr);
+					std::string recordStr = fscan.getRecord();
+					// new_page.insertRecord(recordStr);
 
-	// 				// get the index key from record
-	// 				const char *record = recordStr.c_str();
-	// 				if (BTreeMetaData.attrType == INTEGER)
-	// 				{
-	// 					int key = *((int *)(record + offsetof(RECORD, i)));
-	// 					RIDKeyPair<int> k;
-	// 					k.set(scanRid, key);
-	// 					recordKey.push_back(k);
-	// 					std::cout << key << std::endl;
-	// 				}
-	// 				else if (BTreeMetaData.attrType == DOUBLE)
-	// 				{
-	// 					double key = *((double *)(record + offsetof(RECORD, d)));
-	// 					RIDKeyPair<double> k;
-	// 					k.set(scanRid, key);
-	// 					recordKey.push_back(k);
-	// 					std::cout << key << std::endl;
-	// 				}
-	// 				else if (BTreeMetaData.attrType == STRING)
-	// 				{
-	// 					std::string key = (record + offsetof(RECORD, s));
-	// 					RIDKeyPair<std::string> k;
-	// 					k.set(scanRid, key);
-	// 					recordKey.push_back(k);
-	// 					std::cout << key << std::endl;
-	// 				}
-	// 			}
-	// 		}
-	// 		catch (InsufficientSpaceException &e)
-	// 		{
-				
-	// 			BTreeDataFile->writePage(BTreeID, new_page);
-	// 			new_page = BTreeDataFile->allocatePage(BTreeID);
-	// 		}
-	// 	}
-	// }
-	// catch (EndOfFileException e)
-	// {
-	// 	std::cout << "Read all records" << std::endl;
-	// }
+					// get the index key from record
+					const char *record = recordStr.c_str();
+					if (BTreeMetaData.attrType == INTEGER)
+					{
+						int key = *((int *)(record + offsetof(RECORD, i)));
+						insertEntry(&key, scanRid);
+					}
+					else if (BTreeMetaData.attrType == DOUBLE)
+					{
+						double key = *((double *)(record + offsetof(RECORD, d)));
+						insertEntry(&key, scanRid);
+					}
+					else if (BTreeMetaData.attrType == STRING)
+					{
+						std::string key = (record + offsetof(RECORD, s));
+						insertEntry(&key, scanRid);
+					}
+				}
+			}
+			catch (InsufficientSpaceException &e)
+			{
+				// todo: allocate a new page 
+				// BTreeDataFile->writePage(BTreeID, new_page);
+				// new_page = BTreeDataFile->allocatePage(BTreeID);
+			}
+		}
+	}
+	catch (EndOfFileException e)
+	{
+		std::cout << "Read all records" << std::endl;
+		// data is written into it, set dirty bit to true
+		bufMgr->unPinPage(file, headerPageNum, true);
+		bufMgr->unPinPage(file, rootPageNum, true);
+	}
 
 	// BTreeDataFile->writePage(BTreeID, new_page);
 }
@@ -166,16 +160,15 @@ BTreeIndex::BTreeIndex(const std::string & relationName,
 	Page* headerPage;
 	Page* rootPage;
 	try {
-		BTreeDataFile = new BlobFile(indexName, true);
-		BTreeIndex::file = BTreeDataFile;
+		file = new BlobFile(indexName, true);
 	}
 	catch (const FileExistsException& e) {
 		// todo: if the exsited file index doesn't match witht the inserted index, throw a BadIndexInfoException
 
-		BTreeDataFile = new BlobFile(indexName, false);
+		file = new BlobFile(indexName, false);
 
 		// here number is one because it is the metadata, and page number starts at one
-		bufMgr->readPage(BTreeDataFile, 1, headerPage);
+		bufMgr->readPage(file, 1, headerPage);
 
 		IndexMetaInfo* metaDataInfo = (IndexMetaInfo*) headerPage;
 
@@ -188,7 +181,7 @@ BTreeIndex::BTreeIndex(const std::string & relationName,
 
 	// copy metadata information
 	IndexMetaInfo BTreeMetaData;
-	memcpy(BTreeMetaData.relationName, relationName.c_str(), strlen(relationName.c_str()) + 1);
+	memcpy(BTreeMetaData.relationName, relationName.c_str(), STRINGSIZE);
 	BTreeMetaData.attrByteOffset = attrByteOffset;
 	BTreeMetaData.attrType = attrType;
 
@@ -211,6 +204,15 @@ BTreeIndex::BTreeIndex(const std::string & relationName,
 
 BTreeIndex::~BTreeIndex()
 {
+	try {
+		bufMgr->flushFile(file);
+	}
+	catch (const std::exception &e)
+	{
+		std::cout << "ERROR when flushing the file" << std::endl;
+	}
+	
+	delete file;
 }
 
 // -----------------------------------------------------------------------------
@@ -219,7 +221,11 @@ BTreeIndex::~BTreeIndex()
 
 const void BTreeIndex::insertEntry(const void *key, const RecordId rid) 
 {
-
+	// read the header page and cast it into IndexMetaInfo
+	Page* headerPage;
+	bufMgr->readPage(file, headerPageNum, headerPage);
+	IndexMetaInfo* metaDataPage = (IndexMetaInfo*) headerPage;
+	std::cout << "is leaf page: " << metaDataPage->isLeaf << std::endl;
 }
 
 // -----------------------------------------------------------------------------
