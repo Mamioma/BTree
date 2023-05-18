@@ -227,6 +227,54 @@ BTreeIndex::~BTreeIndex()
 // -----------------------------------------------------------------------------
 // BTreeIndex::insertEntry
 // -----------------------------------------------------------------------------
+void BTreeIndex::insertDataLeaf(PageId pageId, int position, void *key)
+{
+	Page* leafPage;
+	bufMgr->readPage(file, pageId, leafPage);
+	bufMgr->unPinPage(file, pageId, true);
+	if (attributeType == INTEGER) 
+	{
+		LeafNodeInt* leafNode = reinterpret_cast<LeafNodeInt*>(leafPage);
+		leafNode->keyArray[position] = *(int*) key;
+	} else if (attributeType == DOUBLE) 
+	{
+		LeafNodeDouble* leafNode = reinterpret_cast<LeafNodeDouble*>(leafPage);
+		leafNode->keyArray[position] = *(double*) key;
+	} else 
+	{
+		LeafNodeString* leafNode = reinterpret_cast<LeafNodeString*>(leafPage);
+		for (int i = 0; i < STRINGSIZE; i++)
+		{
+			leafNode->keyArray[position][i] = (*(std::string *)key)[i];
+		}
+	}
+}
+
+void BTreeIndex::insertDataNonLeaf(PageId pageId, int position, void *key)
+{
+	Page *nonLeafPage;
+	bufMgr->readPage(file, pageId, nonLeafPage);
+	bufMgr->unPinPage(file, pageId, true);
+	if (attributeType == INTEGER)
+	{
+		NonLeafNodeInt *nonLeafNode = reinterpret_cast<NonLeafNodeInt *>(nonLeafPage);
+		nonLeafNode->keyArray[position] = *(int*) key;
+	}
+	else if (attributeType == DOUBLE)
+	{
+		NonLeafNodeDouble *nonLeafNode = reinterpret_cast<NonLeafNodeDouble *>(nonLeafPage);
+		nonLeafNode->keyArray[position] = *(double *)key;
+	}
+	else
+	{
+		NonLeafNodeString *nonLeafNode = reinterpret_cast<NonLeafNodeString *>(nonLeafPage);
+		for (int i = 0; i < STRINGSIZE; i++)
+		{
+			nonLeafNode->keyArray[position][i] = (*(std::string *)key)[i];
+		}
+	}
+}
+
 template <class T, class LeafType, class NonLeafType>
 void BTreeIndex::splitLeafPage(PageId &rootPageNum, const void *key, const RecordId rid)
 {
@@ -263,7 +311,7 @@ void BTreeIndex::splitLeafPage(PageId &rootPageNum, const void *key, const Recor
 	nonLeafNode->level = 1;
 	nonLeafNode->size = 1;
 	// push the right sibling's first record's key value up the non leaf node
-	nonLeafNode->keyArray[0] = *(T*) key;
+	insertDataNonLeaf(newRootId, 0, key);
 	// set the nonLeafNode's pointer, pointing to left sibling
 	nonLeafNode->pageNoArray[0] = rootPageNum;
 	// create a new leaf page for storing the new data
@@ -280,7 +328,7 @@ void BTreeIndex::splitLeafPage(PageId &rootPageNum, const void *key, const Recor
 	 */
 	// insert key into right sibling node
 	leafNodeRight->size = 1;
-	leafNodeRight->keyArray[0] = *(T*) key;
+	insertDataLeaf(newLeafNodeId, 0, key);
 	leafNodeRight->ridArray[0] = rid;
 	// point left sibling to right sibling
 	leafNodeLeft->rightSibPageNo = newLeafNodeId;

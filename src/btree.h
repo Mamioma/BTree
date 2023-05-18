@@ -537,6 +537,18 @@ class BTreeIndex {
    */
   template <class T, class LeafType, class NonLeafType>
   void splitLeafPage(PageId &rootPageNum, const void* key, const RecordId rid);
+
+  /**
+   * @brief
+   * insert key into leaf node, without updating the size attribute in struct 
+   */
+  void insertDataLeaf(PageId pageId, int position, void *key);
+
+  /**
+   * @brief
+   * insert key into nonleaf node, without updating the size attribute in struct
+   */
+  void insertDataNonLeaf(PageId pageId, int position, void *key);
 };
 
 template <class T>
