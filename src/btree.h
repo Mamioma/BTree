@@ -529,6 +529,14 @@ class BTreeIndex {
    **/
   template <class T>
   void buildBTree(const std::string &relationName, IndexMetaInfo &BTreeMetaData);
+
+  /**
+   * @brief 
+   * split leaf node
+   * 
+   */
+  template <class T, class LeafType, class NonLeafType>
+  void splitLeafPage(PageId &rootPageNum, const void* key, const RecordId rid);
 };
 
 template <class T>
