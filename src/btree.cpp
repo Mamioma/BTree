@@ -86,8 +86,6 @@ void BTreeIndex::buildBTree(const std::string &relationName,
 	BTreeMetaData.rootPageNo = rootPageNum;
 	BTreeMetaData.isLeafPage = true;
 
-	std::cout << "INTARRAYLEAFSIZE: " << INTARRAYLEAFSIZE << std::endl;
-
 	// copy the metadata into header page
 	memcpy(headerPage, &BTreeMetaData, sizeof(IndexMetaInfo));
 
@@ -244,8 +242,66 @@ const void BTreeIndex::insertEntry(const void *key, const RecordId rid)
 		// read the root page
 		Page *rootPage;
 		bufMgr->readPage(file, rootPageNum, rootPage);
-		bufMgr->unPinPage(file, rootPageNum, false);
-		std::cout << "size = " << ((LeafNodeInt*)rootPage)->size << std::endl;
+		
+		// insert the data if the size doesn't excced the limit
+		if (attributeType == INTEGER) {
+			if (((LeafNodeInt *)rootPage)->size < INTARRAYLEAFSIZE) 
+			{
+				// insert data into root page 
+				LeafNodeInt* leafInt = reinterpret_cast<LeafNodeInt*>(rootPage);
+				leafInt->keyArray[leafInt->size] = *(int*)key;
+				std::cout << *(int *)key << std::endl;
+				leafInt->ridArray[leafInt->size] = rid;
+				leafInt->size++;
+
+				// unpin page and set the dirty bit to true, because the data is modified
+				bufMgr->unPinPage(file, rootPageNum, true);
+			} else 
+			{
+				// todo: handle the situation that size excced the limit
+				throw BadIndexInfoException(std::string("out of limit"));
+
+				// unpin page and set dirty bit to false because there is no modification
+				bufMgr->unPinPage(file, rootPageNum, false);
+			}
+		} else if (attributeType == DOUBLE) {
+			if (((LeafNodeDouble *)rootPage)->size < DOUBLEARRAYLEAFSIZE)
+			{
+				// insert data into root page
+				LeafNodeDouble *leafDouble = reinterpret_cast<LeafNodeDouble *>(rootPage);
+				leafDouble->keyArray[leafDouble->size] = *(double *)key;
+				leafDouble->ridArray[leafDouble->size] = rid;
+				leafDouble->size++;
+
+				// unpin page and set the dirty bit to true, because the data is modified
+				bufMgr->unPinPage(file, rootPageNum, true);
+			} else 
+			{
+				// todo: handle the situation that size excced the limit
+
+				// unpin page and set dirty bit to false because there is no modification
+				bufMgr->unPinPage(file, rootPageNum, false);
+			}
+		} else {
+			if (((LeafNodeString *)rootPage)->size < STRINGARRAYLEAFSIZE)
+			{
+				// insert data into root page
+				LeafNodeString *leafString = reinterpret_cast<LeafNodeString *>(rootPage);
+				memcpy(leafString->keyArray[leafString->size], (char *)key, 10);
+				leafString->ridArray[leafString->size] = rid;
+				leafString->size++;
+
+				// unpin page and set the dirty bit to true, because the data is modified
+				bufMgr->unPinPage(file, rootPageNum, true);
+			}
+			else
+			{
+				// todo: handle the situation that size excced the limit
+
+				// unpin page and set dirty bit to false because there is no modification
+				bufMgr->unPinPage(file, rootPageNum, false);
+			}
+		}
 	} else {
 		// todo: dealing with non leaf pages
 	}
