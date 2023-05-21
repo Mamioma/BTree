@@ -60,6 +60,7 @@ const void BTreeIndex::InitializeBTreeIndex(BufMgr *bufMgrIn,
 	}
 	BTreeIndex::scanExecuting = false;
 	BTreeIndex::headerPageNum = 1;
+	BTreeIndex::fullTime = 0;
 }
 
 template <class T>
@@ -259,6 +260,7 @@ void BTreeIndex::insertDataNonLeaf(PageId pageId, int position, const void *key)
 	{
 		NonLeafNodeInt *nonLeafNode = reinterpret_cast<NonLeafNodeInt *>(nonLeafPage);
 		nonLeafNode->keyArray[position] = *(int*) key;
+		std::cout << "non leaf key: " << nonLeafNode->keyArray[position] << " position: " << position << std::endl;
 	}
 	else if (attributeType == DOUBLE)
 	{
@@ -272,6 +274,7 @@ void BTreeIndex::insertDataNonLeaf(PageId pageId, int position, const void *key)
 		{
 			nonLeafNode->keyArray[position][i] = (*(std::string *)key)[i];
 		}
+		std::cout << "non leaf key: " << nonLeafNode->keyArray[position] << " position: " << position << std::endl;
 	}
 }
 
@@ -360,7 +363,6 @@ const void BTreeIndex::insertEntry(const void *key, const RecordId rid)
 				// insert data into root page 
 				LeafNodeInt* leafInt = reinterpret_cast<LeafNodeInt*>(rootPage);
 				leafInt->keyArray[leafInt->size] = *(int*)key;
-				std::cout << *(int *)key << std::endl;
 				leafInt->ridArray[leafInt->size] = rid;
 				leafInt->size++;
 
@@ -369,6 +371,7 @@ const void BTreeIndex::insertEntry(const void *key, const RecordId rid)
 			} else 
 			{
 				// handle the situation that size excced the limit
+				std::cout << "handle the situation that size excced the limit" << std::endl;
 				splitLeafPage<int, LeafNodeInt, NonLeafNodeInt>(rootPageNum, key, rid);
 			}
 		} else if (attributeType == DOUBLE) 
@@ -399,8 +402,6 @@ const void BTreeIndex::insertEntry(const void *key, const RecordId rid)
 				{
 					leafString->keyArray[leafString->size][i] = (*(std::string *)key)[i];
 				}
-				std::cout << strlen(leafString->keyArray[leafString->size]) << " ";
-				std::cout << leafString->keyArray[leafString->size] << std::endl;
 				leafString->ridArray[leafString->size] = rid;
 				leafString->size++;
 
@@ -410,6 +411,7 @@ const void BTreeIndex::insertEntry(const void *key, const RecordId rid)
 			else
 			{
 				// handle the situation that size excced the limit
+				std::cout << "handle the situation that size excced the limit" << std::endl;
 				splitLeafPage<std::string, LeafNodeString, NonLeafNodeString>(rootPageNum, key, rid);
 			}
 		}
@@ -419,38 +421,51 @@ const void BTreeIndex::insertEntry(const void *key, const RecordId rid)
 		if (attributeType == INTEGER) 
 		{
 			traverseNode<int, LeafNodeInt, NonLeafNodeInt>(rootPageNum, key, rid);
-			
-
 		} else if (attributeType == DOUBLE) 
 		{
-			// todo: handling double 
-
+			traverseNode<double, LeafNodeDouble, NonLeafNodeDouble>(rootPageNum, key, rid);
 		} else 
 		{
-			// todo: handling string
-
+			traverseNode<std::string, LeafNodeString, NonLeafNodeString>(rootPageNum, key, rid);
 		}
 	}
 
 }
 
-bool BTreeIndex::compareKey(const void* nodeKey, const void* key) 
+bool BTreeIndex::compareNonLeafKey(PageId pageId, int index, const void* key)
 {
-	if (attributeType == INTEGER) {
-		return *(int*) nodeKey >= *(int*) key;
-	} 
-	else if (attributeType == DOUBLE) 
+	if (attributeType == INTEGER)
 	{
-		return *(double*) nodeKey >= *(double*) key;
-	} 
-	else 
+		Page* nonLeafPage;
+		bufMgr->readPage(file, pageId, nonLeafPage);
+		bufMgr->unpinPage(file, pageId, false);
+		NonLeafNodeInt* nonLeafNode;
+	} else if (attributeType == DOUBLE)
 	{
-		int res = strcmp((char*) nodeKey, (char*) key);
-		if (res >= 0) 
+
+	} else
+	{
+
+	}
+}
+bool BTreeIndex::compareKey(void* nodeKey, const void* key)
+{
+	if (attributeType == INTEGER)
+	{
+		return *(int*)nodeKey <= *(int*)key;
+	} else if (attributeType == DOUBLE)
+	{
+		return *(double*)nodeKey <= *(double*)key;
+	} else 
+	{
+		std::cout << "-----------------";
+		std::cout << *(std::string*) key << "----------------" << nodeKey << std::endl;
+		int res = strcmp((char*)(nodeKey), (char *)key);
+		if (res <= 0)
 		{
 			return true;
 		}
-		else 
+		else
 		{
 			return false;
 		}
@@ -466,10 +481,9 @@ void BTreeIndex::splitLeafPageAndInsertEntry(PageId &rootPageNum, PageId leafPag
 
 	Page* leafPage;
 	bufMgr->readPage(file, leafPageId, leafPage);
-	bufMgr->readPage(file, leafPage, false);
+	bufMgr->unPinPage(file, leafPageId, false);
 	LeafType* leafNode = reinterpret_cast<LeafType* >(leafPage);
-
-	if (whetherLeafIsFull(leafNode->size)) 
+	if (!whetherLeafIsFull(leafNode->size)) 
 	{
 		throw BadIndexInfoException("the leaf node has empty space");
 	}
@@ -486,7 +500,7 @@ void BTreeIndex::splitLeafPageAndInsertEntry(PageId &rootPageNum, PageId leafPag
 	leafNode->rightSibPageNo = newLeafPageId;
 
 	// if rootPage is not full, then just update the pointer
-	if (!whetherNonLeafIsFull(rootNode->size))
+	if (!whetherNonLeafIsFull(rootPageNum))
 	{
 		insertDataNonLeaf(rootPageNum, rootNode->size, key);
 		rootNode->size++;
@@ -513,11 +527,12 @@ void BTreeIndex::traverseNode(PageId &rootPageNum, const void *key, RecordId rid
 		int index = 0;
 		for (index = 0; index < nonLeafNode->size; index++)
 		{
-			if (compareKey(nonLeafNode->keyArray[index], key)) 
+			if (compareKey(&nonLeafNode->keyArray[index], key))
 			{
 				// if the key is greater than the key in the leaf, continue searching
 				continue;
-			} else 
+			}
+			else
 			{
 				// if not, break
 				break;
@@ -525,9 +540,10 @@ void BTreeIndex::traverseNode(PageId &rootPageNum, const void *key, RecordId rid
 		}
 		// go to leaf node according to index:
 		Page* leafPage;
-		PageId leafPageId = nonLeafNode->ridArray[index];
+		PageId leafPageId = nonLeafNode->pageNoArray[index];
 		bufMgr->readPage(file, leafPageId, leafPage);
 		LeafType* leafNode = reinterpret_cast<LeafType* >(leafPage);
+		std::cout << "index: " << index << " key: " << leafNode->keyArray[leafNode->size - 1] << " current key: " << *(T *)key << std::endl;
 		// check if the page is filled
 		if (!whetherLeafIsFull(leafNode->size))
 		{
@@ -540,18 +556,21 @@ void BTreeIndex::traverseNode(PageId &rootPageNum, const void *key, RecordId rid
 		}
 		else {
 			// split page when leaf Node is full
+			std::cout << "leaf node is filled, key is: " << *(T*)key << std::endl;
 			bufMgr->unPinPage(file, leafPageId, false);
 			splitLeafPageAndInsertEntry<T, LeafType, NonLeafType>(rootPageNum, leafPageId, key, rid);
 			bufMgr->unPinPage(file, rootPageNum, true);
 			// if the node is not the global root node, it can be done recursivly
 			// if so, then we need to create a new global root and update the meta data
-			if (whetherNonLeafIsFull(nonLeafNode->size) && rootPageNum == BTreeIndex::rootPageNum) 
+			if (whetherNonLeafIsFull(rootPageNum) && rootPageNum == BTreeIndex::rootPageNum) 
 			{
+				std::cout << "root node is filled, size is:" << nonLeafNode->size << " key is: " << *(T *)key << std::endl;
 				Page* newLeafPage;
 				PageId newLeafPageId = nonLeafNode->pageNoArray[nonLeafNode->size];
 				bufMgr->readPage(file, newLeafPageId, newLeafPage);
 				bufMgr->unPinPage(file, newLeafPageId, false);
 				LeafType* newLeafNode = reinterpret_cast<LeafType* >(newLeafPage);
+				std::cout << "size: " << newLeafNode->size << " key: " << newLeafNode->keyArray[newLeafNode->size - 1] << std::endl;
 				if (!whetherLeafIsFull(newLeafNode->size))
 				{
 					throw BadIndexInfoException("the leaf Node should be filled");
@@ -574,7 +593,7 @@ void BTreeIndex::traverseNode(PageId &rootPageNum, const void *key, RecordId rid
 				NonLeafType *nonLeafRightSiblingNode = reinterpret_cast<NonLeafType *>(rootRightSiblingPage);
 				nonLeafRightSiblingNode->level = 1;
 				nonLeafRightSiblingNode->size = 0;
-				nonLeafRightSiblingNode->keyArray[0] = newLeafRightSiblingNode->keyArray[0];
+				insertDataNonLeaf(rootRightSiblingPageId, 0, &newLeafRightSiblingNode->keyArray[0]);
 				nonLeafRightSiblingNode->pageNoArray[0] = newLeafPageId;
 				nonLeafRightSiblingNode->size++;
 				nonLeafRightSiblingNode->pageNoArray[1] = newLeafRightSiblingPageId;
@@ -588,7 +607,7 @@ void BTreeIndex::traverseNode(PageId &rootPageNum, const void *key, RecordId rid
 				NonLeafType *globalRootNode = reinterpret_cast<NonLeafType *>(globalRootPage);
 				globalRootNode->level = 0;
 				globalRootNode->size = 0;
-				globalRootNode->keyArray[0] = nonLeafRightSiblingNode->keyArray[0];
+				insertDataNonLeaf(globalRootPageId, 0, &nonLeafRightSiblingNode->keyArray[0]);
 				globalRootNode->pageNoArray[0] = rootPageNum;
 				globalRootNode->size++;
 				globalRootNode->pageNoArray[1] = rootRightSiblingPageId;
@@ -609,10 +628,11 @@ void BTreeIndex::traverseNode(PageId &rootPageNum, const void *key, RecordId rid
 		}
 	} else 
 	{
+		std::cout << "traverse start key: " << nonLeafNode->keyArray[nonLeafNode->size-1];
 		int index = 0;
 		for (index = 0; index < nonLeafNode->size; index++) 
 		{
-			if (compareKey(nonLeafNode->keyArray[index], key)) 
+			if (compareKey(&nonLeafNode->keyArray[index], key)) 
 			{
 				// if the key is greater than the key in the leaf, continue searching
 				continue;
@@ -624,24 +644,21 @@ void BTreeIndex::traverseNode(PageId &rootPageNum, const void *key, RecordId rid
 			}
 		}
 		PageId nextLevelPageId = nonLeafNode->pageNoArray[index];
+		std::cout << "  index: " << index << " page number: " << nextLevelPageId << " root page number: " << rootPageNum << std::endl;
 		traverseNode<T, LeafType, NonLeafType>(nextLevelPageId, key, rid);
 
 		Page* NonLeafPage;
 		bufMgr->readPage(file, nextLevelPageId, NonLeafPage);
 		NonLeafType* NextLevelNonLeafNode = reinterpret_cast<NonLeafType* >(NonLeafPage);
-		if (whetherNonLeafIsFull(NextLevelNonLeafNode->size))
+		if (whetherNonLeafIsFull(nextLevelPageId))
 		{
+			fullTime += 1;
+			if (fullTime % 2 == 1) {
+				return;
+			}
 			// here dirty bit is set to true because later we will subtract size and assign
 			// the node to its right sibling
 			bufMgr->unPinPage(file, nextLevelPageId, true);
-
-			Page* newNonLeafPage;
-			PageId newNonLeafPageId;
-			bufMgr->allocPage(file, newNonLeafPageId, newNonLeafPage);
-			bufMgr->unPinPage(file, newNonLeafPageId, true);
-			NonLeafType* newNonLeafNode = reinterpret_cast<NonLeafType* >(newNonLeafPage);
-			newNonLeafNode->level = 1;
-			newNonLeafNode->size = 0;
 			
 			// find the Id
 			PageId targetId = NextLevelNonLeafNode->pageNoArray[NextLevelNonLeafNode->size];
@@ -666,14 +683,21 @@ void BTreeIndex::traverseNode(PageId &rootPageNum, const void *key, RecordId rid
 			{
 				throw BadIndexInfoException("the size of the node should be 1");
 			}
+			Page *newNonLeafPage;
+			PageId newNonLeafPageId;
+			bufMgr->allocPage(file, newNonLeafPageId, newNonLeafPage);
+			bufMgr->unPinPage(file, newNonLeafPageId, true);
+			NonLeafType *newNonLeafNode = reinterpret_cast<NonLeafType *>(newNonLeafPage);
+			newNonLeafNode->level = 1;
+			newNonLeafNode->size = 0;
 			// insert key
-			newNonLeafNode->keyArray[newNonLeafNode->size] = NodeWeWant->keyArray[0];
+			insertDataNonLeaf(newNonLeafPageId, newNonLeafNode->size, &NodeWeWant->keyArray[0]);
 			newNonLeafNode->pageNoArray[newNonLeafNode->size] = targetId;
 			newNonLeafNode->size++;
 			newNonLeafNode->pageNoArray[newNonLeafNode->size] = IdWeWant;
 
 			// update root node
-			if (whetherNonLeafIsFull(nonLeafNode->size)) 
+			if (whetherNonLeafIsFull(rootPageNum)) 
 			{
 				throw BadIndexInfoException("the height of the B+ Tree is over 3, need more complicated implementation");
 			}
@@ -681,7 +705,7 @@ void BTreeIndex::traverseNode(PageId &rootPageNum, const void *key, RecordId rid
 			 * @brief here need to subtract size because we have assign the right most to another node
 			 */
 			NextLevelNonLeafNode->size--;
-			nonLeafNode->keyArray[nonLeafNode->size] = newNonLeafNode->keyArray[newNonLeafNode->size-1];
+			insertDataNonLeaf(rootPageNum, nonLeafNode->size, &newNonLeafNode->keyArray[newNonLeafNode->size - 1]);
 			nonLeafNode->size++;
 			nonLeafNode->pageNoArray[nonLeafNode->size] = newNonLeafPageId;
 			bufMgr->unPinPage(file, rootPageNum, true);
@@ -724,39 +748,84 @@ bool BTreeIndex::whetherLeafIsFull(int size)
 	}
 }
 
-bool BTreeIndex::whetherNonLeafIsFull(int size) 
+bool BTreeIndex::whetherNonLeafIsFull(PageId pageId) 
 {
+	Page* nonLeafPage;
+	bufMgr->readPage(file, pageId, nonLeafPage);
+	bufMgr->unPinPage(file, pageId, false);
 	if (attributeType == INTEGER)
 	{
+		NonLeafNodeInt* NonLeafNode = reinterpret_cast<NonLeafNodeInt* >(nonLeafPage);
+		int size = NonLeafNode->size;
 		if (size < INTARRAYNONLEAFSIZE)
 		{
 			return false;
 		}
 		else
 		{
-			return true;
+			Page* leafPage;
+			PageId leafPageId = NonLeafNode->pageNoArray[NonLeafNode->size];
+			bufMgr->readPage(file, leafPageId, leafPage);
+			bufMgr->unPinPage(file, leafPageId, false);
+			LeafNodeInt* LeafNode = reinterpret_cast<LeafNodeInt* >(leafPage);
+			if (LeafNode->size < INTARRAYLEAFSIZE) 
+			{
+				return false;
+			}
+			else 
+			{
+				return true;
+			}
 		}
 	}
 	else if (attributeType == DOUBLE)
 	{
+		NonLeafNodeDouble *NonLeafNode = reinterpret_cast<NonLeafNodeDouble *>(nonLeafPage);
+		int size = NonLeafNode->size;
 		if (size < DOUBLEARRAYNONLEAFSIZE)
 		{
 			return false;
 		}
 		else
 		{
-			return true;
+			Page *leafPage;
+			PageId leafPageId = NonLeafNode->pageNoArray[NonLeafNode->size];
+			bufMgr->readPage(file, leafPageId, leafPage);
+			bufMgr->unPinPage(file, leafPageId, false);
+			LeafNodeDouble *LeafNode = reinterpret_cast<LeafNodeDouble *>(leafPage);
+			if (LeafNode->size < DOUBLEARRAYLEAFSIZE)
+			{
+				return false;
+			}
+			else
+			{
+				return true;
+			}
 		}
 	}
 	else
 	{
+		NonLeafNodeString *NonLeafNode = reinterpret_cast<NonLeafNodeString *>(nonLeafPage);
+		int size = NonLeafNode->size;
 		if (size < STRINGARRAYNONLEAFSIZE)
 		{
 			return false;
 		}
 		else
 		{
-			return true;
+			Page *leafPage;
+			PageId leafPageId = NonLeafNode->pageNoArray[NonLeafNode->size];
+			bufMgr->readPage(file, leafPageId, leafPage);
+			bufMgr->unPinPage(file, leafPageId, false);
+			LeafNodeString *LeafNode = reinterpret_cast<LeafNodeString *>(leafPage);
+			if (LeafNode->size < STRINGARRAYLEAFSIZE)
+			{
+				return false;
+			}
+			else
+			{
+				return true;
+			}
 		}
 	}
 }
