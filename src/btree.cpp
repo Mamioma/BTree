@@ -438,16 +438,34 @@ bool BTreeIndex::compareNonLeafKey(PageId pageId, int index, const void* key)
 	{
 		Page* nonLeafPage;
 		bufMgr->readPage(file, pageId, nonLeafPage);
-		bufMgr->unpinPage(file, pageId, false);
-		NonLeafNodeInt* nonLeafNode;
+		bufMgr->unPinPage(file, pageId, false);
+		NonLeafNodeInt* nonLeafNode = reinterpret_cast<NonLeafNodeInt* >(nonLeafPage);
+		return nonLeafNode->keyArray[index] <= *(int*)key;
 	} else if (attributeType == DOUBLE)
 	{
-
+		Page *nonLeafPage;
+		bufMgr->readPage(file, pageId, nonLeafPage);
+		bufMgr->unPinPage(file, pageId, false);
+		NonLeafNodeDouble *nonLeafNode = reinterpret_cast<NonLeafNodeDouble *>(nonLeafPage);
+		return nonLeafNode->keyArray[index] <= *(double *)key;
 	} else
 	{
-
+		Page *nonLeafPage;
+		bufMgr->readPage(file, pageId, nonLeafPage);
+		bufMgr->unPinPage(file, pageId, false);
+		NonLeafNodeString *nonLeafNode = reinterpret_cast<NonLeafNodeString *>(nonLeafPage);
+		int res = strcmp(nonLeafNode->keyArray[index], (char *)key);
+		if (res <= 0)
+		{
+			return true;
+		}
+		else
+		{
+			return false;
+		}
 	}
 }
+
 bool BTreeIndex::compareKey(void* nodeKey, const void* key)
 {
 	if (attributeType == INTEGER)
@@ -527,7 +545,7 @@ void BTreeIndex::traverseNode(PageId &rootPageNum, const void *key, RecordId rid
 		int index = 0;
 		for (index = 0; index < nonLeafNode->size; index++)
 		{
-			if (compareKey(&nonLeafNode->keyArray[index], key))
+			if (compareNonLeafKey(rootPageNum, index, key))
 			{
 				// if the key is greater than the key in the leaf, continue searching
 				continue;
@@ -632,7 +650,7 @@ void BTreeIndex::traverseNode(PageId &rootPageNum, const void *key, RecordId rid
 		int index = 0;
 		for (index = 0; index < nonLeafNode->size; index++) 
 		{
-			if (compareKey(&nonLeafNode->keyArray[index], key)) 
+			if (compareNonLeafKey(rootPageNum, index, key)) 
 			{
 				// if the key is greater than the key in the leaf, continue searching
 				continue;

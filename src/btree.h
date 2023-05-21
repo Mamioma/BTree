@@ -576,6 +576,12 @@ class BTreeIndex {
 
   /**
    * @brief
+   * compare the key to see which one is larger
+   */
+  bool compareNonLeafKey(PageId pageId, int index, const void* key);
+
+  /**
+   * @brief
    * check to see if the leaf node is filled
    */
   bool whetherLeafIsFull(int size);
