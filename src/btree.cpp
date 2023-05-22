@@ -278,6 +278,26 @@ void BTreeIndex::insertDataNonLeaf(PageId pageId, int position, const void *key)
 	}
 }
 
+template <class Type1, class Type2>
+void BTreeIndex::insertDataAnyTypeString(PageId pageId, int position, PageId keyPageId, int keyPagePosition)
+{
+	Page *nonLeafPage;
+	bufMgr->readPage(file, pageId, nonLeafPage);
+	bufMgr->unPinPage(file, pageId, true);
+	Type1 *nonLeafNode = reinterpret_cast<Type1 *>(nonLeafPage);
+
+	Page *nonLeafKeyPage;
+	bufMgr->readPage(file, keyPageId, nonLeafKeyPage);
+	bufMgr->unPinPage(file, keyPageId, false);
+	Type2 *nonLeafKeyNode = reinterpret_cast<Type2 *>(nonLeafKeyPage);
+	std::cout << "--------key: " << nonLeafKeyNode->keyArray[keyPagePosition] << std::endl;
+	for (int i = 0; i < STRINGSIZE; i++)
+	{
+		nonLeafNode->keyArray[position][i] = nonLeafKeyNode->keyArray[keyPagePosition][i];
+	}
+	std::cout << "non leaf key: " << nonLeafNode->keyArray[position] << " position: " << position << std::endl;
+}
+
 template <class T, class LeafType, class NonLeafType>
 void BTreeIndex::splitLeafPage(PageId &rootPageNum, const void *key, const RecordId rid)
 {
@@ -454,7 +474,7 @@ bool BTreeIndex::compareNonLeafKey(PageId pageId, int index, const void* key)
 		bufMgr->readPage(file, pageId, nonLeafPage);
 		bufMgr->unPinPage(file, pageId, false);
 		NonLeafNodeString *nonLeafNode = reinterpret_cast<NonLeafNodeString *>(nonLeafPage);
-		int res = strcmp(nonLeafNode->keyArray[index], (char *)key);
+		int res = strcmp(nonLeafNode->keyArray[index], (*(std::string *)(key)).c_str());
 		if (res <= 0)
 		{
 			return true;
@@ -611,7 +631,13 @@ void BTreeIndex::traverseNode(PageId &rootPageNum, const void *key, RecordId rid
 				NonLeafType *nonLeafRightSiblingNode = reinterpret_cast<NonLeafType *>(rootRightSiblingPage);
 				nonLeafRightSiblingNode->level = 1;
 				nonLeafRightSiblingNode->size = 0;
-				insertDataNonLeaf(rootRightSiblingPageId, 0, &newLeafRightSiblingNode->keyArray[0]);
+				if (attributeType == STRING) 
+				{
+					insertDataAnyTypeString<NonLeafNodeString, LeafNodeString>(rootRightSiblingPageId, 0, newLeafRightSiblingPageId, 0);
+				} else 
+				{
+					insertDataNonLeaf(rootRightSiblingPageId, 0, &newLeafRightSiblingNode->keyArray[0]);
+				}
 				nonLeafRightSiblingNode->pageNoArray[0] = newLeafPageId;
 				nonLeafRightSiblingNode->size++;
 				nonLeafRightSiblingNode->pageNoArray[1] = newLeafRightSiblingPageId;
@@ -625,7 +651,13 @@ void BTreeIndex::traverseNode(PageId &rootPageNum, const void *key, RecordId rid
 				NonLeafType *globalRootNode = reinterpret_cast<NonLeafType *>(globalRootPage);
 				globalRootNode->level = 0;
 				globalRootNode->size = 0;
-				insertDataNonLeaf(globalRootPageId, 0, &nonLeafRightSiblingNode->keyArray[0]);
+				if (attributeType == STRING)
+				{
+					insertDataAnyTypeString<NonLeafNodeString, NonLeafNodeString>(globalRootPageId, 0, rootRightSiblingPageId, 0);
+				} else 
+				{
+					insertDataNonLeaf(globalRootPageId, 0, &nonLeafRightSiblingNode->keyArray[0]);
+				}
 				globalRootNode->pageNoArray[0] = rootPageNum;
 				globalRootNode->size++;
 				globalRootNode->pageNoArray[1] = rootRightSiblingPageId;
@@ -709,7 +741,13 @@ void BTreeIndex::traverseNode(PageId &rootPageNum, const void *key, RecordId rid
 			newNonLeafNode->level = 1;
 			newNonLeafNode->size = 0;
 			// insert key
-			insertDataNonLeaf(newNonLeafPageId, newNonLeafNode->size, &NodeWeWant->keyArray[0]);
+			if (attributeType == STRING)
+			{
+				insertDataAnyTypeString<NonLeafNodeString, LeafNodeString>(newNonLeafPageId, newNonLeafNode->size, IdWeWant, 0);
+			} else 
+			{
+				insertDataNonLeaf(newNonLeafPageId, newNonLeafNode->size, &NodeWeWant->keyArray[0]);
+			}
 			newNonLeafNode->pageNoArray[newNonLeafNode->size] = targetId;
 			newNonLeafNode->size++;
 			newNonLeafNode->pageNoArray[newNonLeafNode->size] = IdWeWant;
@@ -723,7 +761,13 @@ void BTreeIndex::traverseNode(PageId &rootPageNum, const void *key, RecordId rid
 			 * @brief here need to subtract size because we have assign the right most to another node
 			 */
 			NextLevelNonLeafNode->size--;
-			insertDataNonLeaf(rootPageNum, nonLeafNode->size, &newNonLeafNode->keyArray[newNonLeafNode->size - 1]);
+			if (attributeType == STRING)
+			{
+				insertDataAnyTypeString<NonLeafNodeString, NonLeafNodeString>(rootPageNum, nonLeafNode->size, newNonLeafPageId, newNonLeafNode->size - 1);
+			} else 
+			{
+				insertDataNonLeaf(rootPageNum, nonLeafNode->size, &newNonLeafNode->keyArray[newNonLeafNode->size - 1]);
+			}
 			nonLeafNode->size++;
 			nonLeafNode->pageNoArray[nonLeafNode->size] = newNonLeafPageId;
 			bufMgr->unPinPage(file, rootPageNum, true);

@@ -563,6 +563,13 @@ class BTreeIndex {
 
   /**
    * @brief
+   * insert string key into nonleaf node, without updating the size attribute in struct
+   */
+  template <class Type1, class Type2>
+  void insertDataAnyTypeString(PageId pageId, int position, PageId keyPageId, int keyPagePosition);
+
+  /**
+   * @brief
    * travese and locate the position to insert the key
    */
   template <class T, class LeafType, class NonLeafType>
