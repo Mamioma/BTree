@@ -18,6 +18,7 @@
 #include "exceptions/file_exists_exception.h"
 #include "exceptions/insufficient_space_exception.h"
 #include <vector>
+#include <algorithm>
 
 //#define DEBUG
 
@@ -92,6 +93,9 @@ void BTreeIndex::buildBTree(const std::string &relationName,
 
 	// scan the file and insert key RID into vector
 	// todo: here we assume it is initialized with order, but in reality, we need to sort it
+	std::vector<RIDKeyPair<int>> intRidKey;
+	std::vector<RIDKeyPair<double>> doubleRidKey;
+	std::vector<RIDKeyPair<std::string>> stringRidKey;
 	FileScan fscan(relationName, bufMgr);
 	try
 	{
@@ -111,17 +115,26 @@ void BTreeIndex::buildBTree(const std::string &relationName,
 					if (BTreeMetaData.attrType == INTEGER)
 					{
 						int key = *((int *)(record + offsetof(RECORD, i)));
-						insertEntry(&key, scanRid);
+						RIDKeyPair<int> RidKey;
+						RidKey.set(scanRid, key);
+						intRidKey.push_back(RidKey);
+						// insertEntry(&key, scanRid);
 					}
 					else if (BTreeMetaData.attrType == DOUBLE)
 					{
 						double key = *((double *)(record + offsetof(RECORD, d)));
-						insertEntry(&key, scanRid);
+						RIDKeyPair<double> RidKey;
+						RidKey.set(scanRid, key);
+						doubleRidKey.push_back(RidKey);
+						// insertEntry(&key, scanRid);
 					}
 					else if (BTreeMetaData.attrType == STRING)
 					{
 						std::string key = (record + offsetof(RECORD, s));
-						insertEntry(&key, scanRid);
+						RIDKeyPair<std::string> RidKey;
+						RidKey.set(scanRid, key);
+						stringRidKey.push_back(RidKey);
+						// insertEntry(&key, scanRid);
 					}
 				}
 			}
@@ -135,10 +148,34 @@ void BTreeIndex::buildBTree(const std::string &relationName,
 	}
 	catch (EndOfFileException e)
 	{
+		if (BTreeIndex::attributeType == INTEGER)
+		{
+			std::sort(intRidKey.begin(), intRidKey.end(), [](RIDKeyPair<int> i, RIDKeyPair<int> j){return i.key < j.key;});
+			for (RIDKeyPair<int> i: intRidKey)
+			{
+				insertEntry(&i.key, i.rid);
+			}
+		} else if (BTreeIndex::attributeType == DOUBLE)
+		{
+			std::sort(doubleRidKey.begin(), doubleRidKey.end(), [](RIDKeyPair<double> i, RIDKeyPair<double> j){return i.key < j.key;});
+			for (RIDKeyPair<double> i: doubleRidKey)
+			{
+				insertEntry(&i.key, i.rid);
+			}
+		} else 
+		{
+			std::sort(stringRidKey.begin(), stringRidKey.end(), [](RIDKeyPair<std::string> i, RIDKeyPair<std::string> j){return i.key < j.key;});
+			for (RIDKeyPair<std::string> i: stringRidKey)
+			{
+				insertEntry(&i.key, i.rid);
+			}
+		}
 		std::cout << "Read all records" << std::endl;
 		// data is written into it, set dirty bit to true
 		bufMgr->unPinPage(file, headerPageNum, true);
+		std::cout << "Read all records" << std::endl;
 		bufMgr->unPinPage(file, rootPageNum, true);
+		std::cout << "Read all records" << std::endl;
 	}
 
 	// BTreeDataFile->writePage(BTreeID, new_page);
@@ -653,10 +690,12 @@ void BTreeIndex::traverseNode(PageId &rootPageNum, const void *key, RecordId rid
 				globalRootNode->size = 0;
 				if (attributeType == STRING)
 				{
-					insertDataAnyTypeString<NonLeafNodeString, NonLeafNodeString>(globalRootPageId, 0, rootRightSiblingPageId, 0);
+					// insertDataAnyTypeString<NonLeafNodeString, NonLeafNodeString>(globalRootPageId, 0, rootRightSiblingPageId, 0);
+					insertDataAnyTypeString<NonLeafNodeString, LeafNodeString>(globalRootPageId, 0, newLeafPageId, 0);
 				} else 
 				{
-					insertDataNonLeaf(globalRootPageId, 0, &nonLeafRightSiblingNode->keyArray[0]);
+					// insertDataNonLeaf(globalRootPageId, 0, &nonLeafRightSiblingNode->keyArray[0]);
+					insertDataNonLeaf(globalRootPageId, 0, &newLeafNode->keyArray[0]);
 				}
 				globalRootNode->pageNoArray[0] = rootPageNum;
 				globalRootNode->size++;
@@ -763,10 +802,12 @@ void BTreeIndex::traverseNode(PageId &rootPageNum, const void *key, RecordId rid
 			NextLevelNonLeafNode->size--;
 			if (attributeType == STRING)
 			{
-				insertDataAnyTypeString<NonLeafNodeString, NonLeafNodeString>(rootPageNum, nonLeafNode->size, newNonLeafPageId, newNonLeafNode->size - 1);
+				// insertDataAnyTypeString<NonLeafNodeString, NonLeafNodeString>(rootPageNum, nonLeafNode->size, newNonLeafPageId, newNonLeafNode->size - 1);
+				insertDataAnyTypeString<NonLeafNodeString, LeafNodeString>(rootPageNum, nonLeafNode->size, targetId, 0);
 			} else 
 			{
-				insertDataNonLeaf(rootPageNum, nonLeafNode->size, &newNonLeafNode->keyArray[newNonLeafNode->size - 1]);
+				// insertDataNonLeaf(rootPageNum, nonLeafNode->size, &newNonLeafNode->keyArray[newNonLeafNode->size - 1]);
+				insertDataNonLeaf(rootPageNum, nonLeafNode->size, &newLeafNode->keyArray[0]);
 			}
 			nonLeafNode->size++;
 			nonLeafNode->pageNoArray[nonLeafNode->size] = newNonLeafPageId;
@@ -896,12 +937,318 @@ bool BTreeIndex::whetherNonLeafIsFull(PageId pageId)
 // BTreeIndex::startScan
 // -----------------------------------------------------------------------------
 
-const void BTreeIndex::startScan(const void* lowValParm,
-				   const Operator lowOpParm,
-				   const void* highValParm,
-				   const Operator highOpParm)
+bool BTreeIndex::isALeafPage()
 {
+	Page *headerPage;
+	bufMgr->readPage(file, BTreeIndex::headerPageNum, headerPage);
+	bufMgr->unPinPage(file, BTreeIndex::headerPageNum, false);
+	IndexMetaInfo *metaData = (IndexMetaInfo *)headerPage;
+	return metaData->isLeafPage;
+}
 
+template <class T>
+bool BTreeIndex::judgeKey(T key, T ValParm, const Operator OpParm)
+{
+	if (BTreeIndex::attributeType == INTEGER)
+	{
+		if (OpParm == GT)
+		{
+			return key > ValParm;
+		}
+		else if (OpParm == GTE)
+		{
+			return key >= ValParm;
+		}
+		else if (OpParm == LT)
+		{
+			return key < ValParm;
+		}
+		else if (OpParm == LTE)
+		{
+			return key <= ValParm;
+		}
+		else
+		{
+			throw BadIndexInfoException("unknown operator");
+		}
+	}
+	else if (BTreeIndex::attributeType == DOUBLE)
+	{
+		if (OpParm == GT)
+		{
+			return key > ValParm;
+		}
+		else if (OpParm == GTE)
+		{
+			return key >= ValParm;
+		}
+		else if (OpParm == LT)
+		{
+			return key < ValParm;
+		}
+		else if (OpParm == LTE)
+		{
+			return key <= ValParm;
+		}
+		else
+		{
+			throw BadIndexInfoException("unknown operator");
+		}
+	}
+	else if (BTreeIndex::attributeType == STRING)
+	{
+		if (OpParm == GT)
+		{
+			return key > ValParm;
+		}
+		else if (OpParm == GTE)
+		{
+			return key >= ValParm;
+		}
+		else if (OpParm == LT)
+		{
+			return key < ValParm;
+		}
+		else if (OpParm == LTE)
+		{
+			return key <= ValParm;
+		}
+		else
+		{
+			throw BadIndexInfoException("unknown operator");
+		}
+	}
+	else
+	{
+		throw BadIndexInfoException("unknown attribute type");
+	}
+}
+
+void BTreeIndex::traverseLeafPage(PageId rootPageNum, const void *lowValParm, const Operator lowOpParm)
+{
+	Page *rootPage;
+	bufMgr->readPage(file, rootPageNum, rootPage);
+	bufMgr->unPinPage(file, rootPageNum, false);
+
+	if (BTreeIndex::attributeType == INTEGER)
+	{
+		LeafNodeInt *leafNode = reinterpret_cast<LeafNodeInt *>(rootPage);
+		int index;
+		for (index = 0; index < leafNode->size; index++)
+		{
+			std::cout << leafNode->keyArray[index] << " ";
+			if (judgeKey<int>(leafNode->keyArray[index], BTreeIndex::lowValInt, lowOpParm))
+			{
+				break;
+			}
+		}
+		std::cout << std::endl;
+		if (index == leafNode->size || leafNode->size == 0)
+		{
+			throw NoSuchKeyFoundException();
+		}
+		BTreeIndex::currentPageNum = rootPageNum;
+		BTreeIndex::nextEntry = index;
+	}
+	else if (BTreeIndex::attributeType == DOUBLE)
+	{
+		LeafNodeDouble *leafNode = reinterpret_cast<LeafNodeDouble *>(rootPage);
+		int index;
+		for (index = 0; index < leafNode->size; index++)
+		{
+			if (judgeKey<double>(leafNode->keyArray[index], BTreeIndex::lowValDouble, lowOpParm))
+			{
+				break;
+			}
+		}
+		if (index == leafNode->size || leafNode->size == 0)
+		{
+			throw NoSuchKeyFoundException();
+		}
+		BTreeIndex::currentPageNum = rootPageNum;
+		BTreeIndex::nextEntry = index;
+	}
+	else
+	{
+		LeafNodeString *leafNode = reinterpret_cast<LeafNodeString *>(rootPage);
+		int index;
+		for (index = 0; index < leafNode->size; index++)
+		{
+			if (judgeKey<std::string>(std::string(leafNode->keyArray[index]), BTreeIndex::lowValString, lowOpParm))
+			{
+				break;
+			}
+		}
+		if (index == leafNode->size || leafNode->size == 0)
+		{
+			throw NoSuchKeyFoundException();
+		}
+		BTreeIndex::currentPageNum = rootPageNum;
+		BTreeIndex::nextEntry = index;
+	}
+}
+
+const void BTreeIndex::startScan(const void *lowValParm,
+								 const Operator lowOpParm,
+								 const void *highValParm,
+								 const Operator highOpParm)
+{
+	// if another scan is excuting, should be end here
+	if (BTreeIndex::scanExecuting)
+	{
+		throw BadIndexInfoException("another scan is executing");
+	}
+	BTreeIndex::scanExecuting = true;
+
+	// check lowOpParm: only support GT and GTE here
+	if (lowOpParm != GT && lowOpParm != GTE)
+	{
+		throw BadOpcodesException();
+	}
+	// check highOpParm: only support LT and LTE here
+	if (highOpParm != LT && highOpParm != LTE)
+	{
+		throw BadOpcodesException();
+	}
+
+	// check if lowValParm is less than highValParm
+	if (BTreeIndex::attributeType == INTEGER)
+	{
+		if (*(int *)lowValParm > *(int *)highValParm)
+		{
+			throw BadScanrangeException();
+		}
+		BTreeIndex::lowValInt = *(int *)lowValParm;
+		BTreeIndex::highValInt = *(int *)highValParm;
+	}
+	else if (BTreeIndex::attributeType == DOUBLE)
+	{
+		if (*(double *)lowValParm > *(double *)highValParm)
+		{
+			throw BadScanrangeException();
+		}
+		BTreeIndex::lowValDouble = *(double *)lowValParm;
+		BTreeIndex::highValDouble = *(double *)highValParm;
+	}
+	else
+	{
+		if ((std::string)((char *)lowValParm) > (std::string)((char *)highValParm))
+		{
+			throw BadScanrangeException();
+		}
+		BTreeIndex::lowValString = ((std::string)((char *)lowValParm)).substr(0, STRINGSIZE);
+		BTreeIndex::highValString = ((std::string)((char *)highValParm)).substr(0, STRINGSIZE);
+	}
+
+	BTreeIndex::lowOp = lowOpParm;
+	BTreeIndex::highOp = highOpParm;
+
+	Page *rootPage;
+	bufMgr->readPage(file, rootPageNum, rootPage);
+	bufMgr->unPinPage(file, rootPageNum, false);
+
+	// if it is a leaf page, then just traverse it
+	if (isALeafPage())
+	{
+		traverseLeafPage(BTreeIndex::rootPageNum, lowValParm, lowOpParm);
+	}
+	else
+	{
+		// if it's not a leaf page, traverse recursivly and find the page that we want
+		std::cout << "recursive traverse" << std::endl;
+		traverseLeafPageRecursivly(BTreeIndex::rootPageNum, lowValParm, lowOpParm);
+	}
+}
+
+void BTreeIndex::traverseLeafPageRecursivly(PageId rootPageNum, const void *lowValParm, const Operator lowOpParm)
+{
+	Page *rootPage;
+	bufMgr->readPage(file, rootPageNum, rootPage);
+	bufMgr->unPinPage(file, rootPageNum, false);
+	if (BTreeIndex::attributeType == INTEGER)
+	{
+		NonLeafNodeInt *nonLeafNode = reinterpret_cast<NonLeafNodeInt *>(rootPage);
+		int index;
+		for (index = 0; index < nonLeafNode->size; index++)
+		{
+			std::cout << nonLeafNode->keyArray[index] << " ";
+			if (judgeKey<int>(nonLeafNode->keyArray[index], BTreeIndex::lowValInt, lowOpParm))
+			{
+				break;
+			}
+		}
+		std::cout << std::endl;
+		if (nonLeafNode->size == 0)
+		{
+			throw NoSuchKeyFoundException();
+		}
+		// if it is just above the leaf page, then just call traverseLeafPage
+		if (nonLeafNode->level == 1)
+		{
+			std::cout << "index: " << index << " leaf traverse" << std::endl;
+			traverseLeafPage(nonLeafNode->pageNoArray[index], lowValParm, lowOpParm);
+		}
+		else
+		{
+			// if it is not above the leaf page, then just call func recrusivly
+			std::cout << "index: " << index << " recursive traverse" << std::endl;
+			traverseLeafPageRecursivly(nonLeafNode->pageNoArray[index], lowValParm, lowOpParm);
+		}
+	}
+	else if (BTreeIndex::attributeType == DOUBLE)
+	{
+		NonLeafNodeDouble *nonLeafNode = reinterpret_cast<NonLeafNodeDouble *>(rootPage);
+		int index;
+		for (index = 0; index < nonLeafNode->size; index++)
+		{
+			if (judgeKey<double>(nonLeafNode->keyArray[index], BTreeIndex::lowValDouble, lowOpParm))
+			{
+				break;
+			}
+		}
+		if (nonLeafNode->size == 0)
+		{
+			throw NoSuchKeyFoundException();
+		}
+		// if it is just above the leaf page, then just call traverseLeafPage
+		if (nonLeafNode->level == 1)
+		{
+			traverseLeafPage(nonLeafNode->pageNoArray[index], lowValParm, lowOpParm);
+		}
+		else
+		{
+			// if it is not above the leaf page, then just call func recrusivly
+			traverseLeafPageRecursivly(nonLeafNode->pageNoArray[index], lowValParm, lowOpParm);
+		}
+	}
+	else if (BTreeIndex::attributeType == STRING)
+	{
+		NonLeafNodeString *nonLeafNode = reinterpret_cast<NonLeafNodeString *>(rootPage);
+		int index;
+		for (index = 0; index < nonLeafNode->size; index++)
+		{
+			if (judgeKey<std::string>(nonLeafNode->keyArray[index], BTreeIndex::lowValString, lowOpParm))
+			{
+				break;
+			}
+		}
+		if (nonLeafNode->size == 0)
+		{
+			throw NoSuchKeyFoundException();
+		}
+		// if it is just above the leaf page, then just call traverseLeafPage
+		if (nonLeafNode->level == 1)
+		{
+			std::cout << "index: " << index << " leaf traverse" << std::endl;
+			traverseLeafPage(nonLeafNode->pageNoArray[index], lowValParm, lowOpParm);
+		}
+		else
+		{
+			// if it is not above the leaf page, then just call func recrusivly
+			std::cout << "index: " << index << " recursive traverse" << std::endl;
+			traverseLeafPageRecursivly(nonLeafNode->pageNoArray[index], lowValParm, lowOpParm);
+		}
+	}
 }
 
 // -----------------------------------------------------------------------------
@@ -910,7 +1257,126 @@ const void BTreeIndex::startScan(const void* lowValParm,
 
 const void BTreeIndex::scanNext(RecordId& outRid) 
 {
+	if (BTreeIndex::scanExecuting == false)
+	{
+		throw ScanNotInitializedException();
+	}
 
+	Page* targetPage;
+	PageId targetPageId = BTreeIndex::currentPageNum;
+	bufMgr->readPage(file, targetPageId, targetPage);
+	bufMgr->unPinPage(file, targetPageId, false);
+	if (BTreeIndex::attributeType == INTEGER)
+	{
+		LeafNodeInt* leafNode = reinterpret_cast<LeafNodeInt*>(targetPage);
+		int index = BTreeIndex::nextEntry;
+		if (index < leafNode->size)
+		{
+			if (judgeKey<int>(leafNode->keyArray[index], BTreeIndex::lowValInt, BTreeIndex::lowOp) && judgeKey<int>(leafNode->keyArray[index], BTreeIndex::highValInt, BTreeIndex::highOp))
+			{
+				outRid = leafNode->ridArray[index];
+				BTreeIndex::nextEntry++;
+				return;
+			} else 
+			{
+				throw IndexScanCompletedException();
+			}
+		} else 
+		{
+			Page* rightPage;
+			PageId rightPageId = leafNode->rightSibPageNo;
+			bufMgr->readPage(file, rightPageId, rightPage);
+			bufMgr->unPinPage(file, rightPageId, false);
+			LeafNodeInt* rightLeafNode = reinterpret_cast<LeafNodeInt*>(rightPage);
+			if (rightLeafNode->size == 0)
+			{
+				throw IndexScanCompletedException();
+			}
+			if (judgeKey<int>(rightLeafNode->keyArray[0], BTreeIndex::lowValInt, BTreeIndex::lowOp) && judgeKey<int>(rightLeafNode->keyArray[0], BTreeIndex::highValInt, BTreeIndex::highOp)) 
+			{
+				outRid = rightLeafNode->ridArray[0];
+				BTreeIndex::nextEntry = 1;
+				BTreeIndex::currentPageNum = rightPageId;
+				return;
+			} else 
+			{
+				throw IndexScanCompletedException();
+			}
+		}
+	} else if (BTreeIndex::attributeType == DOUBLE)
+	{
+		LeafNodeDouble* leafNode = reinterpret_cast<LeafNodeDouble*>(targetPage);
+		int index = BTreeIndex::nextEntry;
+		if (index < leafNode->size)
+		{
+			if (judgeKey<double>(leafNode->keyArray[index], BTreeIndex::lowValDouble, BTreeIndex::lowOp) && judgeKey<double>(leafNode->keyArray[index], BTreeIndex::highValDouble, BTreeIndex::highOp))
+			{
+				outRid = leafNode->ridArray[index];
+				BTreeIndex::nextEntry++;
+				return;
+			} else 
+			{
+				throw IndexScanCompletedException();
+			}
+		} else 
+		{
+			Page* rightPage;
+			PageId rightPageId = leafNode->rightSibPageNo;
+			bufMgr->readPage(file, rightPageId, rightPage);
+			bufMgr->unPinPage(file, rightPageId, false);
+			LeafNodeDouble* rightLeafNode = reinterpret_cast<LeafNodeDouble*>(rightPage);
+			if (rightLeafNode->size == 0)
+			{
+				throw IndexScanCompletedException();
+			}
+			if (judgeKey<double>(rightLeafNode->keyArray[0], BTreeIndex::lowValDouble, BTreeIndex::lowOp) && judgeKey<double>(rightLeafNode->keyArray[0], BTreeIndex::highValDouble, BTreeIndex::highOp)) 
+			{
+				outRid = rightLeafNode->ridArray[index];
+				BTreeIndex::nextEntry = 1;
+				BTreeIndex::currentPageNum = rightPageId;
+				return;
+			} else 
+			{
+				throw IndexScanCompletedException();
+			}
+		}
+	} else {
+		LeafNodeString* leafNode = reinterpret_cast<LeafNodeString*>(targetPage);
+		int index = BTreeIndex::nextEntry;
+		if (index < leafNode->size)
+		{
+			if (judgeKey<std::string>(leafNode->keyArray[index], BTreeIndex::lowValString, BTreeIndex::lowOp) && judgeKey<std::string>(leafNode->keyArray[index], BTreeIndex::highValString, BTreeIndex::highOp))
+			{
+				outRid = leafNode->ridArray[index];
+				BTreeIndex::nextEntry++;
+				return;
+			} else 
+			{
+				throw IndexScanCompletedException();
+			}
+		} else 
+		{
+			Page* rightPage;
+			PageId rightPageId = leafNode->rightSibPageNo;
+			bufMgr->readPage(file, rightPageId, rightPage);
+			bufMgr->unPinPage(file, rightPageId, false);
+			LeafNodeString* rightLeafNode = reinterpret_cast<LeafNodeString*>(rightPage);
+			if (rightLeafNode->size == 0)
+			{
+				throw IndexScanCompletedException();
+			}
+			if (judgeKey<std::string>(rightLeafNode->keyArray[0], BTreeIndex::lowValString, BTreeIndex::lowOp) && judgeKey<std::string>(rightLeafNode->keyArray[0], BTreeIndex::highValString, BTreeIndex::highOp)) 
+			{
+				outRid = rightLeafNode->ridArray[index];
+				BTreeIndex::nextEntry = 1;
+				BTreeIndex::currentPageNum = rightPageId;
+				return;
+			} else 
+			{
+				throw IndexScanCompletedException();
+			}
+		}
+	}
 }
 
 // -----------------------------------------------------------------------------
@@ -919,7 +1385,14 @@ const void BTreeIndex::scanNext(RecordId& outRid)
 //
 const void BTreeIndex::endScan() 
 {
-
+	if (BTreeIndex::scanExecuting == false)
+	{
+		throw ScanNotInitializedException();
+	}
+	else 
+	{
+		BTreeIndex::scanExecuting = false;
+	}
 }
 
 }
