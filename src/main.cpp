@@ -70,6 +70,7 @@ void createRelationRandom();
 void intTests();
 int intScan(BTreeIndex *index, int lowVal, Operator lowOp, int highVal, Operator highOp);
 void indexTests();
+void indexReopenTest();
 void doubleTests();
 int doubleScan(BTreeIndex *index, double lowVal, Operator lowOp, double highVal, Operator highOp);
 void stringTests();
@@ -164,9 +165,16 @@ int main(int argc, char **argv)
 	File::remove(relationName);
 
 	test1();
-	// test2();
-	// test3();
-	//errorTests();
+	test2();
+	test3();
+	errorTests();
+
+	try {
+		File::remove(intIndexName);
+	} catch(FileNotFoundException e) {
+
+	}
+	indexReopenTest();
 
   return 1;
 }
@@ -370,6 +378,23 @@ void createRelationRandom()
 // indexTests
 // -----------------------------------------------------------------------------
 
+void indexReopenTest()
+{
+	std::cout << "--------------" << std::endl;
+	createRelationForward();
+	std::cout << "--------------" << std::endl;
+	if (testNum == 1)
+	{
+		std::cout << "Create a B+ Tree index on the integer field" << std::endl;
+		{
+			BTreeIndex index(relationName, intIndexName, bufMgr, offsetof(tuple,i), INTEGER);
+		}
+
+		intTests();
+	}
+	deleteRelation();
+}
+
 void indexTests()
 {
   if(testNum == 1)
@@ -424,6 +449,7 @@ void intTests()
 	checkPassFail(intScan(&index,0,GT,1,LT), 0)
 	checkPassFail(intScan(&index,300,GT,400,LT), 99)
 	checkPassFail(intScan(&index,3000,GTE,4000,LT), 1000)
+	checkPassFail(intScan(&index,-1000,GTE,6000,LT), 5000)
 }
 
 int intScan(BTreeIndex * index, int lowVal, Operator lowOp, int highVal, Operator highOp)
@@ -742,6 +768,7 @@ void errorTests()
 	std::cout << "Scan with bad highOp" << std::endl;
 	try
 	{
+		std::cout << int2 << " " << int5 << std::endl;
   	index.startScan(&int2, GTE, &int5, GTE);
 		std::cout << "BadOpcodesException Test 2 Failed." << std::endl;
 	}
@@ -763,6 +790,9 @@ void errorTests()
 	}
 
 	deleteRelation();
+	
+
+	std::cout << "-----------------------" << std::endl;
 }
 
 void deleteRelation()
