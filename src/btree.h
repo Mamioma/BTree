@@ -542,7 +542,9 @@ class BTreeIndex {
   /**
    * @brief 
    * split leaf node
-   * 
+   * @param rootPageNum
+   * @param key
+   * @param rid
    */
   template <class T, class LeafType, class NonLeafType>
   void splitLeafPage(PageId &rootPageNum, const void* key, const RecordId rid);
@@ -550,18 +552,28 @@ class BTreeIndex {
   /**
    * @brief
    * insert key into leaf node, without updating the size attribute in struct 
+   * @param pageId
+   * @param position
+   * @param key
    */
   void insertDataLeaf(PageId pageId, int position, const void *key);
 
   /**
    * @brief
    * insert key into nonleaf node, without updating the size attribute in struct
+   * @param pageId
+   * @param position
+   * @param key
    */
   void insertDataNonLeaf(PageId pageId, int position, const void *key);
 
   /**
    * @brief
    * insert string key into nonleaf node, without updating the size attribute in struct
+   * @param pageId
+   * @param position
+   * @param keyPageId
+   * @param keyPagePosition
    */
   template <class Type1, class Type2>
   void insertDataAnyTypeString(PageId pageId, int position, PageId keyPageId, int keyPagePosition);
@@ -569,6 +581,9 @@ class BTreeIndex {
   /**
    * @brief
    * travese and locate the position to insert the key
+   * @param rootPageNum
+   * @param key
+   * @param rid
    */
   template <class T, class LeafType, class NonLeafType>
   void traverseNode(PageId &rootPageNum, const void *key, RecordId rid);
@@ -576,30 +591,40 @@ class BTreeIndex {
   /**
    * @brief
    * compare the key to see which one is larger
+   * @param nodeKey
+   * @param key
    */
   bool compareKey(void* nodeKey, const void* key);
 
   /**
    * @brief
    * compare the key to see which one is larger
+   * @param pageId
+   * @param key
    */
   bool compareNonLeafKey(PageId pageId, int index, const void* key);
 
   /**
    * @brief
    * check to see if the leaf node is filled
+   * @param size
    */
   bool whetherLeafIsFull(int size);
 
   /**
    * @brief
    * check to see if the non leaf node is filled
+   * @param pageId
    */
   bool whetherNonLeafIsFull(PageId pageId);
 
   /**
    * @brief
    * split leaf page and update root page
+   * @param rootPageNum
+   * @param leafPageId
+   * @param key
+   * @param rid
    */
   template <class T, class LeafType, class NonLeafType>
   void splitLeafPageAndInsertEntry(PageId&rootPageNum, PageId leafPageId, const void *key, const RecordId rid);
@@ -614,6 +639,9 @@ class BTreeIndex {
    * @brief
    * whether the key is greater or less than ValParm
    * return true if key is greater; false if key is less
+   * @param key
+   * @param ValParm
+   * @param OpParm
    */
   template <class T>
   bool judgeKey(T key, T ValParm, const Operator OpParm);
@@ -621,12 +649,18 @@ class BTreeIndex {
   /**
    * @brief
    * traverse through leaf page
+   * @param rootPageNum
+   * @param ValParm
+   * @param OpParm
    */
   void traverseLeafPage(PageId rootPageNum, const void *ValParm, const Operator OpParm);
 
   /**
    * @brief
    * the node is not a leaf page, traverse recursivly and find the leaf page that we want
+   * @param rootPageNum
+   * @param ValParm
+   * @param OpParm
    */
   void traverseLeafPageRecursivly(PageId rootPageNum, const void *ValParm, const Operator OpParm);
 };
