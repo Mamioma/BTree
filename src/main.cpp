@@ -67,10 +67,13 @@ BufMgr * bufMgr = new BufMgr(100);
 void createRelationForward();
 void createRelationBackward();
 void createRelationRandom();
+void createRelationnonConsecutiveKey();
 void intTests();
 int intScan(BTreeIndex *index, int lowVal, Operator lowOp, int highVal, Operator highOp);
 void indexTests();
 void indexReopenTest();
+void nonConsecutiveKeyTest();
+void nonConsecutiveTest();
 void doubleTests();
 int doubleScan(BTreeIndex *index, double lowVal, Operator lowOp, double highVal, Operator highOp);
 void stringTests();
@@ -175,6 +178,12 @@ int main(int argc, char **argv)
 
 	}
 	indexReopenTest();
+	try {
+		File::remove(intIndexName);
+	} catch(FileNotFoundException e) {
+
+	}
+	nonConsecutiveKeyTest();
 
   return 1;
 }
@@ -209,6 +218,15 @@ void test3()
 	std::cout << "createRelationRandom" << std::endl;
 	createRelationRandom();
 	indexTests();
+	deleteRelation();
+}
+
+void nonConsecutiveKeyTest() 
+{
+	std::cout << "--------------------" << std::endl;
+	std::cout << "createRelationDuplicateKey" << std::endl;
+	createRelationnonConsecutiveKey();
+	nonConsecutiveTest();
 	deleteRelation();
 }
 
@@ -374,6 +392,50 @@ void createRelationRandom()
 	file1->writePage(new_page_number, new_page);
 }
 
+void createRelationnonConsecutiveKey()
+{
+	std::vector<RecordId> ridVec;
+  // destroy any old copies of relation file
+	try
+	{
+		File::remove(relationName);
+	}
+	catch(FileNotFoundException e)
+	{
+	}
+
+  file1 = new PageFile(relationName, true);
+
+  // initialize all of record1.s to keep purify happy
+  memset(record1.s, ' ', sizeof(record1.s));
+	PageId new_page_number;
+  Page new_page = file1->allocatePage(new_page_number);
+
+  // Insert a bunch of tuples into the relation.
+  for(int i = 0; i < relationSize; i++ )
+	{
+    sprintf(record1.s, "%05d string record", i * 5);
+    record1.i = i * 5;
+    record1.d = (double)(i * 5);
+    std::string new_data(reinterpret_cast<char*>(&record1), sizeof(record1));
+
+		while(1)
+		{
+			try
+			{
+    		new_page.insertRecord(new_data);
+				break;
+			}
+			catch(InsufficientSpaceException e)
+			{
+				file1->writePage(new_page_number, new_page);
+  			new_page = file1->allocatePage(new_page_number);
+			}
+		}
+  }
+
+	file1->writePage(new_page_number, new_page);
+}
 // -----------------------------------------------------------------------------
 // indexTests
 // -----------------------------------------------------------------------------
@@ -510,6 +572,17 @@ int intScan(BTreeIndex * index, int lowVal, Operator lowOp, int highVal, Operato
   std::cout << std::endl;
 
 	return numResults;
+}
+
+void nonConsecutiveTest()
+{
+	std::cout << "Create a B+ Tree index on the integer field" << std::endl;
+    BTreeIndex index(relationName, intIndexName, bufMgr, offsetof(tuple,i), INTEGER);
+
+	checkPassFail(intScan(&index,25*5,GT,40*5,LT), 14)
+	checkPassFail(intScan(&index,20*5,GTE,35*5,LTE), 16)
+	checkPassFail(intScan(&index,-3*5,GT,3*5, LT), 3)
+	checkPassFail(intScan(&index,996*5,GT,1001*5,LT), 4)
 }
 
 // -----------------------------------------------------------------------------

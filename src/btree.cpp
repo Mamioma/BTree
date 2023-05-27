@@ -93,7 +93,6 @@ void BTreeIndex::buildBTree(const std::string &relationName,
 	memcpy(headerPage, &BTreeMetaData, sizeof(IndexMetaInfo));
 
 	// scan the file and insert key RID into vector
-	// todo: here we assume it is initialized with order, but in reality, we need to sort it
 	std::vector<RIDKeyPair<int>> intRidKey;
 	std::vector<RIDKeyPair<double>> doubleRidKey;
 	std::vector<RIDKeyPair<std::string>> stringRidKey;
@@ -109,7 +108,6 @@ void BTreeIndex::buildBTree(const std::string &relationName,
 					fscan.scanNext(scanRid);
 
 					std::string recordStr = fscan.getRecord();
-					// new_page.insertRecord(recordStr);
 
 					// get the index key from record
 					const char *record = recordStr.c_str();
@@ -119,7 +117,6 @@ void BTreeIndex::buildBTree(const std::string &relationName,
 						RIDKeyPair<int> RidKey;
 						RidKey.set(scanRid, key);
 						intRidKey.push_back(RidKey);
-						// insertEntry(&key, scanRid);
 					}
 					else if (BTreeMetaData.attrType == DOUBLE)
 					{
@@ -127,7 +124,6 @@ void BTreeIndex::buildBTree(const std::string &relationName,
 						RIDKeyPair<double> RidKey;
 						RidKey.set(scanRid, key);
 						doubleRidKey.push_back(RidKey);
-						// insertEntry(&key, scanRid);
 					}
 					else if (BTreeMetaData.attrType == STRING)
 					{
@@ -135,15 +131,11 @@ void BTreeIndex::buildBTree(const std::string &relationName,
 						RIDKeyPair<std::string> RidKey;
 						RidKey.set(scanRid, key);
 						stringRidKey.push_back(RidKey);
-						// insertEntry(&key, scanRid);
 					}
 				}
 			}
 			catch (InsufficientSpaceException &e)
 			{
-				// todo: allocate a new page 
-				// BTreeDataFile->writePage(BTreeID, new_page);
-				// new_page = BTreeDataFile->allocatePage(BTreeID);
 			}
 		}
 	}
@@ -271,7 +263,6 @@ void BTreeIndex::insertDataLeaf(PageId pageId, int position, const void *key)
 {
 	Page* leafPage;
 	bufMgr->readPage(file, pageId, leafPage);
-	bufMgr->unPinPage(file, pageId, true);
 	if (attributeType == INTEGER) 
 	{
 		LeafNodeInt* leafNode = reinterpret_cast<LeafNodeInt*>(leafPage);
@@ -288,13 +279,13 @@ void BTreeIndex::insertDataLeaf(PageId pageId, int position, const void *key)
 			leafNode->keyArray[position][i] = (*(std::string *)key)[i];
 		}
 	}
+	bufMgr->unPinPage(file, pageId, true);
 }
 
 void BTreeIndex::insertDataNonLeaf(PageId pageId, int position, const void *key)
 {
 	Page *nonLeafPage;
 	bufMgr->readPage(file, pageId, nonLeafPage);
-	bufMgr->unPinPage(file, pageId, true);
 	if (attributeType == INTEGER)
 	{
 		NonLeafNodeInt *nonLeafNode = reinterpret_cast<NonLeafNodeInt *>(nonLeafPage);
@@ -315,6 +306,7 @@ void BTreeIndex::insertDataNonLeaf(PageId pageId, int position, const void *key)
 		}
 		std::cout << "non leaf key: " << nonLeafNode->keyArray[position] << " position: " << position << std::endl;
 	}
+	bufMgr->unPinPage(file, pageId, true);
 }
 
 template <class Type1, class Type2>
@@ -322,12 +314,10 @@ void BTreeIndex::insertDataAnyTypeString(PageId pageId, int position, PageId key
 {
 	Page *nonLeafPage;
 	bufMgr->readPage(file, pageId, nonLeafPage);
-	bufMgr->unPinPage(file, pageId, true);
 	Type1 *nonLeafNode = reinterpret_cast<Type1 *>(nonLeafPage);
 
 	Page *nonLeafKeyPage;
 	bufMgr->readPage(file, keyPageId, nonLeafKeyPage);
-	bufMgr->unPinPage(file, keyPageId, false);
 	Type2 *nonLeafKeyNode = reinterpret_cast<Type2 *>(nonLeafKeyPage);
 	std::cout << "--------key: " << nonLeafKeyNode->keyArray[keyPagePosition] << std::endl;
 	for (int i = 0; i < STRINGSIZE; i++)
@@ -335,6 +325,8 @@ void BTreeIndex::insertDataAnyTypeString(PageId pageId, int position, PageId key
 		nonLeafNode->keyArray[position][i] = nonLeafKeyNode->keyArray[keyPagePosition][i];
 	}
 	std::cout << "non leaf key: " << nonLeafNode->keyArray[position] << " position: " << position << std::endl;
+	bufMgr->unPinPage(file, pageId, true);
+	bufMgr->unPinPage(file, keyPageId, false);
 }
 
 template <class T, class LeafType, class NonLeafType>
@@ -477,7 +469,6 @@ const void BTreeIndex::insertEntry(const void *key, const RecordId rid)
 		}
 	} else 
 	{
-		// todo: dealing with non leaf pages
 		if (attributeType == INTEGER) 
 		{
 			traverseNode<int, LeafNodeInt, NonLeafNodeInt>(rootPageNum, key, rid);

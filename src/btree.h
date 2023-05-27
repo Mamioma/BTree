@@ -534,9 +534,7 @@ class BTreeIndex {
    * build a B+ Tree using fileScan class
    * @param relationName 
    * @param bufMgrIn 
-   * @param attrType
-   * @param BTreeDataFile
-   * @param BPlusTree
+   * @param BTreeMetaData
    **/
   template <class T>
   void buildBTree(const std::string &relationName, IndexMetaInfo &BTreeMetaData);
@@ -632,36 +630,4 @@ class BTreeIndex {
    */
   void traverseLeafPageRecursivly(PageId rootPageNum, const void *ValParm, const Operator OpParm);
 };
-
-template <class T>
-class BTree {
-public:
-  // IndexMetaInfo BTreeMetaData;
-  bool isLeafNode;
-  Datatype BTreeType;
-
-  NonLeafNodeInt NonLeafInt;
-  NonLeafNodeDouble NonLeafDouble;
-  NonLeafNodeString NonLeafString;
-  LeafNodeInt LeafInt;
-  LeafNodeDouble LeafDouble;
-  LeafNodeString LeafString;
-  // std::vector<RIDKeyPair<T>> recordKey;
-  // std::vector<PageKeyPair<T>> pageKey;
-
-  std::vector<BTree*> children;
-
-  BTree() {
-    isLeafNode = false;
-  }
-
-  // BTree(char *relationName, int attrByteOffset, Datatype attrType, PageId rootPageNo) {
-  //   memcpy(BTreeMetaData.relationName, relationName, strlen(relationName) + 1);
-  //   BTreeMetaData.attrByteOffset = attrByteOffset;
-  //   BTreeMetaData.attrType = attrType;
-  //   BTreeMetaData.rootPageNo = rootPageNo;
-  //   isRootNode = false;
-  // }
-};
-
 }
